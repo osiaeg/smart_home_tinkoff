@@ -1,8 +1,17 @@
+import sys
 from http.client import HTTPConnection
 import base64
+import os
 
-conn = HTTPConnection('localhost:9998')
-conn.request('POST', "/")
-response = conn.getresponse()
-# print(response.read())
-print(base64.b64decode(response.read()))
+
+def main():
+    for param in sys.argv:
+        print(param)
+
+    conn = HTTPConnection('localhost:9998')
+    conn.request('POST', "/")
+    response = conn.getresponse()
+
+
+if __name__ == "__main__":
+    main()
