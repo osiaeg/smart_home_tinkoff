@@ -101,8 +101,14 @@ class Packet:
 
 
 class Clock:
-    pass
+    def __init__(self, src, cmd_body):
+        self.src = src
+        self.cmd_body = cmd_body
 
+class Socket:
+    def __init__(self, src, cmd_body):
+        self.src = src
+        self.cmd_body = cmd_body
 
 class EnvSensorProps:
     pass
