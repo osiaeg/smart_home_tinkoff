@@ -36,61 +36,64 @@ class TimerCmdBody:
     pass
 
 
+def decode_uvarint(data: bytes) -> tuple[int, int]:
+    value = 0
+    shift = 0
+    for byte in data:
+        value |= (byte & 0x7f) << shift
+        shift += 7
+        if not byte & 0x80:
+            break
+    return value, len(data[:shift // 7])
+
+
 class Payload:
-    src: uvarint.Number
-    dst: uvarint.Number
-    serial: uvarint.Number
+    src: int
+    dst: int
+    serial: int
     dev_type: DeviceType
     cmd: CMD
     cmd_body = None
+    time_cmd_body: int
+    dev_name: str = None
+    dev_drop_dev_name_arr: list[str] = None
 
     def __init__(self, payload_bytes):
         self._parse(payload_bytes)
 
     def _parse(self, payload_bytes):
-        self.src, bytes_read = uvarint.expect(1, payload_bytes)
-        payload_bytes = payload_bytes[bytes_read:]
-        self.dst, bytes_read = uvarint.expect(1, payload_bytes)
-        payload_bytes = payload_bytes[bytes_read:]
-        self.serial, bytes_read = uvarint.expect(1, payload_bytes)
-        payload_bytes = payload_bytes[bytes_read:]
-        self.dev_type = DeviceType(payload_bytes[0])
-        payload_bytes = payload_bytes[1:]
-        self.cmd = CMD(payload_bytes[0])
-        payload_bytes = payload_bytes[1:]
-        print(self.src, self.dst, self.serial, self.dev_type, self.cmd)
+        common_field_arr = []
+
+        for _ in range(3):
+            field, bytes_read = decode_uvarint(payload_bytes)
+            common_field_arr.append(field)
+            payload_bytes = payload_bytes[bytes_read:]
+
+        self.src, self.dst, self.serial = common_field_arr
+        self.dev_type, self.cmd = DeviceType(payload_bytes[0]), CMD(payload_bytes[1])
+        payload_bytes = payload_bytes[2:]
 
         if self.cmd == CMD.TICK:
-            timer_cmd_body, bytes_read = uvarint.expect(1, payload_bytes)
-            # return src[0], dst[0], serial[0], dev_type, cmd, timer_cmd_body[0]
+            self.timer_cmd_body, _ = decode_uvarint(payload_bytes)
 
         elif self.cmd == CMD.IAMHERE:
             if self.dev_type == DeviceType.Switch:
                 dev_name_length = payload_bytes[0]
-                dev_name = payload_bytes[1: dev_name_length + 1]
+                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
                 payload_bytes = payload_bytes[dev_name_length + 1:]
                 dev_drop_size = payload_bytes[0]
                 payload_bytes = payload_bytes[1:]
-                dev_drop_dev_name_arr = []
+                self.dev_drop_dev_name_arr = []
 
                 for _ in range(dev_drop_size):
                     connect_dev_name_length = payload_bytes[0]
                     connect_dev_name = payload_bytes[1: connect_dev_name_length + 1]
-                    dev_drop_dev_name_arr.append(connect_dev_name.decode())
+                    self.dev_drop_dev_name_arr.append(connect_dev_name.decode())
                     payload_bytes = payload_bytes[connect_dev_name_length + 1:]
-
-                # return src[0], dst[0], serial[0], dev_type, cmd, dev_name.decode(), dev_drop_dev_name_arr
 
             elif self.dev_type in [DeviceType.Clock, DeviceType.Lamp]:
                 dev_name_length = payload_bytes[0]
-                dev_name = payload_bytes[1: dev_name_length + 1]
-                payload_bytes = payload_bytes[dev_name_length + 1:]
-                # return src[0], dst[0], serial[0], dev_type, cmd, dev_name.decode()
-
-        else:
-            pass
-            # return src[0], dst[0], serial[0], dev_type, cmd
-
+                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
 
 
 class Packet:
@@ -167,25 +170,15 @@ def check_date():
 
 
 def convert_base64_to_packet(res) -> list[Packet]:
+    packets = []
     bytes_string = decode_base64(res)
 
     while bytes_string:
         length = bytes_string[0]
-        packet = Packet(length, bytes_string[length + 1], bytes_string[1:length + 1])
+        packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
         bytes_string = bytes_string[length + 2:]
 
-    return []
-
-
-def decode_uvarint(data):
-    value = 0
-    shift = 0
-    for byte in data:
-        value |= (byte & 0x7f) << shift
-        shift += 7
-        if not byte & 0x80:
-            break
-    return value, len(data[:shift//7])
+    return packets
 
 
 def encode_uvarint(num):
@@ -207,8 +200,6 @@ def encode_uvarint(num):
     return result
 
 
-
-
 def main():
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
@@ -219,6 +210,8 @@ def main():
     conn = HTTPConnection(url)
     conn.request('POST', "", b'EPAd_38BAQEIU211cnRIdWIt')
     response = conn.getresponse().read()
+    for packet in convert_base64_to_packet(response):
+        print(packet.__dict__)
     base64_string = response.decode()
     print(base64_string)
 
