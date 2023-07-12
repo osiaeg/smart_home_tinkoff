@@ -100,6 +100,10 @@ class Packet:
         self.crc8 = crc8
 
 
+class Clock:
+    pass
+
+
 class EnvSensorProps:
     pass
 
@@ -173,6 +177,38 @@ def convert_base64_to_packet(res) -> list[Packet]:
     return []
 
 
+def decode_uvarint(data):
+    value = 0
+    shift = 0
+    for byte in data:
+        value |= (byte & 0x7f) << shift
+        shift += 7
+        if not byte & 0x80:
+            break
+    return value, len(data[:shift//7])
+
+
+def encode_uvarint(num):
+    result = b""
+
+    while True:
+        # Младшие 7 битов числа
+        b = num & 0x7F
+        num >>= 7
+
+        if num:
+            # Если есть еще байты, устанавливаем младший бит в 1
+            result += bytes([b | 0x80])
+        else:
+            # Если больше нет байтов, устанавливаем младший бит в 0
+            result += bytes([b])
+            break
+
+    return result
+
+
+
+
 def main():
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
@@ -183,13 +219,12 @@ def main():
     conn = HTTPConnection(url)
     conn.request('POST', "", b'EPAd_38BAQEIU211cnRIdWIt')
     response = conn.getresponse().read()
-    convert_base64_to_packet(response)
     base64_string = response.decode()
     print(base64_string)
 
     bytes_string = decode_base64(response)
     length = bytes_string[0]
-    src = uvarint.decode(bytes_string[1:3]).integer
+    src = decode_uvarint(bytes_string[1:])[0]
     dst = uvarint.decode(bytes_string[3:5]).integer
     serial = uvarint.decode(bytes_string[5:7]).integer
     dev_type = bytes_string[6]
