@@ -113,6 +113,21 @@ class Socket:
         self.src = src
         self.cmd_body = cmd_body
 
+class Switch:
+    def __init__(self, src, cmd_body):
+        self.src = src
+        self.cmd_body = cmd_body
+
+class Lamp:
+    def __init__(self, src, cmd_body):
+        self.src = src
+        self.cmd_body = cmd_body
+
+class EnvSensor:
+    def __init__(self, src, cmd_body):
+        self.src = src
+        self.cmd_body = cmd_body
+
 class EnvSensorProps:
     pass
 
@@ -206,6 +221,17 @@ def encode_uvarint(num):
     return result
 
 
+# def toBase(ayf):
+#      ark = encode_uvarint(ayf[0][0])
+#      # ark += encode_uvarint(ayf[dst])
+#      # ark += encode_uvarint(ayf['serial'])
+#      # ark += encode_uvarint(ayf['dev_type'])
+#      # ark += encode_uvarint(ayf['cmd'])
+#      # ark += encode_uvarint(ayf['cmd_body']['dev_name'])
+#      # ark += encode_uvarint(ayf['cmd_body']['dev_drops'])
+#      return ark
+
+
 def main():
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
@@ -267,6 +293,7 @@ def main():
         }
     }])
     print(who_is_here_json)
+    #print(json.dumps,'toBase(*who_is_here_json)')
 
     test_whoishere_base64 = "EPAd_38BAQEIU211cnRIdWIt"
     print(f"Base64 for WHOISHERE: {test_whoishere_base64}")
