@@ -1,11 +1,66 @@
 import os
 import sys
+from enum import Enum
 from http.client import HTTPConnection
 import base64
 import binascii
 import json
 import time
 import uvarint
+
+
+class CMD(Enum):
+    WHOISHERE = 0x01
+    IAMHERE = 0x02
+    GETSTATUS = 0x03
+    STATUS = 0x04
+    SETSTATUS = 0x05
+    TICK = 0x06
+
+
+class Device:
+    dev_name: str
+    dev_props: bytes # много байт
+
+
+class DeviceType(Enum):
+    SmartHub = 0x01
+    EnvSensor = 0x02
+    Switch = 0x03
+    Lamp = 0x04
+    Socket = 0x05
+    Clock = 0x06
+
+
+class TimerCmdBody:
+    pass
+
+
+class Playload:
+    src: uvarint.Number
+    dst: uvarint.Number
+    serial: uvarint.Number
+    dev_type: bytes
+    cmd: bytes = 0x01
+    cmd_body = None
+    if CMD(cmd) in [CMD.WHOISHERE, CMD.IAMHERE]:
+        cmd_body: Device
+    elif CMD(cmd) == CMD.TICK:
+        cmd_body: TimerCmdBody
+
+
+class Packet:
+    length: bytes
+    playload: Playload
+    crc_8: bytes
+
+
+class EnvSensorProps:
+    pass
+
+
+class EnvSensorCmdBody:
+    pass
 
 
 def encode_base64(input_bytes: bytes, urlsafe: bool = False) -> str:
@@ -32,6 +87,36 @@ def decode_base64(input_bytes) -> bytes:
     return output_bytes
 
 
+def crc8(data):
+    crc = 0
+
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x80:
+                crc = (crc << 1) ^ 0xD5  # Возможно надо поменять кодировку
+            else:
+                crc <<= 1
+
+    return crc
+
+
+def check_crc8(payload, checksum):
+    calculated_checksum = crc8(payload)
+    return calculated_checksum == checksum
+
+
+# Пример использования:
+def check_date():
+    payload = [0x01, 0x02, 0x03]
+    crc_8 = 0xFA
+
+    if check_crc8(payload, crc_8):
+        print("Контрольная сумма корректна.")
+    else:
+        print("Контрольная сумма некорректна.")  # Надо отправить запрос на повторное отправление данных
+
+
 def main():
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
@@ -40,72 +125,60 @@ def main():
     hub_adress = sys.argv[2]
 
     conn = HTTPConnection(url)
-    body = json.dumps([{
-        'length':13,
-        'playload':{
-            # 'src': 0xef0,
-            'src':819,
-            'dst':16383,
-            'serial':1,
-            'dev_type':6,
-            # 'cmd': 0x01,
-            'cmd':6,
-            'cmd_body': {
-                # 'timestamp': time.time()
-                'timestamp':1688984021000
-            }
-        },
-        'crc8':138
-    }]
-    )
-    print(body)
     conn.request('POST', "")
     response = conn.getresponse().read()
-    # Входная строка в формате unappended base64
-    encoded_string = "YWJjMTIzIT8kKiYoKSctPUB+"
+    base64_string = response.decode()
+    print(base64_string)
 
-    # Декодирование unappended base64
-    decoded_bytes = base64.b64decode(encoded_string)
+    bytes_string = decode_base64(response)
+    length = bytes_string[0]
+    src = uvarint.decode(bytes_string[1:3]).integer
+    dst = uvarint.decode(bytes_string[3:5]).integer
+    serial = uvarint.decode(bytes_string[5:7]).integer
+    dev_type = bytes_string[6]
+    cmd = bytes_string[7]
+    timestamp = uvarint.decode(bytes_string[8:14]).integer
+    crc_8 = bytes_string[-1]
 
-    # Конвертация декодированных байтов в строку
-    decoded_string = decoded_bytes.decode('utf-8')
+    json_string = json.dumps([{
+        'length': length,
+        'playload': {
+            'src': src,
+            'dst': dst,
+            'serial': serial,
+            'dev_typ': dev_type,
+            'cmd': cmd,
+            'cmd_body': {
+                'timestamp': timestamp
+            }
+        },
+        'crc8': crc_8
+    }], indent=4)
+    print(json_string)
+    print('-' * 20)
 
-    # Конвертация строки в объект JSON
-    json_object = json.loads(decoded_string)
+    src = int(hub_adress, 16)
+    dst = 16383
+    serial = 1
+    dev_type = DeviceType.SmartHub.value
+    cmd = CMD.WHOISHERE.value
+    who_is_here_json = json.dumps([{
+        'playload': {
+            'src': src,
+            'dst': dst,
+            'serial': serial,
+            'dev_type': dev_type,
+            'cmd': cmd,
+            'cmd_body': {
+                'dev_name': 'SmurtHub',
+                'dev_drops': None,
+            }
+        }
+    }], indent=4)
+    print(who_is_here_json)
 
-    # Вывод результата
-    print(json_object)
-    # print(response)
-    # padding = b"=" * (3 - ((len(response) + 3) % 4))
-    # print(binascii.hexlify(base64.b64decode(response + padding), sep=' '))
+    conn.close()
 
 
 if __name__ == "__main__":
     main()
-
-def crc8(data):
-    crc = 0
-
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = (crc << 1) ^ 0xD5 # Возможно надо поменять кодировку
-            else:
-                crc <<= 1
-
-    return crc
-
-def check_crc8(payload, checksum):
-    calculated_checksum = crc8(payload)
-    return calculated_checksum == checksum
-
-# Пример использования:
-def check date():
-    payload = [0x01, 0x02, 0x03]
-    crc_8 = 0xFA
-
-    if check_crc8(payload, crc_8):
-        print("Контрольная сумма корректна.")
-    else:
-        print("Контрольная сумма некорректна.") # Надо отправить запрос на повторное отправление данных
