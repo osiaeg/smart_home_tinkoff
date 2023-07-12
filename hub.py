@@ -20,7 +20,7 @@ class CMD(Enum):
 
 class Device:
     dev_name: str
-    dev_props: bytes # много байт
+    dev_props: bytes  # много байт
 
 
 class DeviceType(Enum):
@@ -36,23 +36,68 @@ class TimerCmdBody:
     pass
 
 
-class Playload:
+class Payload:
     src: uvarint.Number
     dst: uvarint.Number
     serial: uvarint.Number
-    dev_type: bytes
-    cmd: bytes = 0x01
+    dev_type: DeviceType
+    cmd: CMD
     cmd_body = None
-    if CMD(cmd) in [CMD.WHOISHERE, CMD.IAMHERE]:
-        cmd_body: Device
-    elif CMD(cmd) == CMD.TICK:
-        cmd_body: TimerCmdBody
+
+    def __init__(self, payload_bytes):
+        self._parse(payload_bytes)
+
+    def _parse(self, payload_bytes):
+        self.src, bytes_read = uvarint.expect(1, payload_bytes)
+        payload_bytes = payload_bytes[bytes_read:]
+        self.dst, bytes_read = uvarint.expect(1, payload_bytes)
+        payload_bytes = payload_bytes[bytes_read:]
+        self.serial, bytes_read = uvarint.expect(1, payload_bytes)
+        payload_bytes = payload_bytes[bytes_read:]
+        self.dev_type = DeviceType(payload_bytes[0])
+        payload_bytes = payload_bytes[1:]
+        self.cmd = CMD(payload_bytes[0])
+        payload_bytes = payload_bytes[1:]
+        print(self.src, self.dst, self.serial, self.dev_type, self.cmd)
+
+        if self.cmd == CMD.TICK:
+            timer_cmd_body, bytes_read = uvarint.expect(1, payload_bytes)
+            # return src[0], dst[0], serial[0], dev_type, cmd, timer_cmd_body[0]
+
+        elif self.cmd == CMD.IAMHERE:
+            if self.dev_type == DeviceType.Switch:
+                dev_name_length = payload_bytes[0]
+                dev_name = payload_bytes[1: dev_name_length + 1]
+                payload_bytes = payload_bytes[dev_name_length + 1:]
+                dev_drop_size = payload_bytes[0]
+                payload_bytes = payload_bytes[1:]
+                dev_drop_dev_name_arr = []
+
+                for _ in range(dev_drop_size):
+                    connect_dev_name_length = payload_bytes[0]
+                    connect_dev_name = payload_bytes[1: connect_dev_name_length + 1]
+                    dev_drop_dev_name_arr.append(connect_dev_name.decode())
+                    payload_bytes = payload_bytes[connect_dev_name_length + 1:]
+
+                # return src[0], dst[0], serial[0], dev_type, cmd, dev_name.decode(), dev_drop_dev_name_arr
+
+            elif self.dev_type in [DeviceType.Clock, DeviceType.Lamp]:
+                dev_name_length = payload_bytes[0]
+                dev_name = payload_bytes[1: dev_name_length + 1]
+                payload_bytes = payload_bytes[dev_name_length + 1:]
+                # return src[0], dst[0], serial[0], dev_type, cmd, dev_name.decode()
+
+        else:
+            pass
+            # return src[0], dst[0], serial[0], dev_type, cmd
+
 
 
 class Packet:
-    length: bytes
-    playload: Playload
-    crc_8: bytes
+    def __init__(self, length: int, crc8: int, payload_bytes: bytes):
+        self.length = length
+        self.payload = Payload(payload_bytes)
+        self.crc8 = crc8
 
 
 class EnvSensorProps:
@@ -117,6 +162,17 @@ def check_date():
         print("Контрольная сумма некорректна.")  # Надо отправить запрос на повторное отправление данных
 
 
+def convert_base64_to_packet(res) -> list[Packet]:
+    bytes_string = decode_base64(res)
+
+    while bytes_string:
+        length = bytes_string[0]
+        packet = Packet(length, bytes_string[length + 1], bytes_string[1:length + 1])
+        bytes_string = bytes_string[length + 2:]
+
+    return []
+
+
 def main():
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
@@ -125,8 +181,9 @@ def main():
     hub_adress = sys.argv[2]
 
     conn = HTTPConnection(url)
-    conn.request('POST', "")
+    conn.request('POST', "", b'EPAd_38BAQEIU211cnRIdWIt')
     response = conn.getresponse().read()
+    convert_base64_to_packet(response)
     base64_string = response.decode()
     print(base64_string)
 
@@ -142,11 +199,11 @@ def main():
 
     json_string = json.dumps([{
         'length': length,
-        'playload': {
+        'payload': {
             'src': src,
             'dst': dst,
             'serial': serial,
-            'dev_typ': dev_type,
+            'dev_type': dev_type,
             'cmd': cmd,
             'cmd_body': {
                 'timestamp': timestamp
@@ -163,7 +220,7 @@ def main():
     dev_type = DeviceType.SmartHub.value
     cmd = CMD.WHOISHERE.value
     who_is_here_json = json.dumps([{
-        'playload': {
+        'payload': {
             'src': src,
             'dst': dst,
             'serial': serial,
@@ -174,8 +231,11 @@ def main():
                 'dev_drops': None,
             }
         }
-    }], indent=4)
+    }])
     print(who_is_here_json)
+
+    test_whoishere_base64 = "EPAd_38BAQEIU211cnRIdWIt"
+    print(f"Base64 for WHOISHERE: {test_whoishere_base64}")
 
     conn.close()
 
