@@ -269,58 +269,52 @@ class SmartHub:
         self.serial += 1
 
     def send_packet(self, cmd, **kwargs):
+        bytes_str = bytes()
+        bytes_str += encode_uvarint(self.src)
+        bytes_str += encode_uvarint(kwargs['dst'])
+        bytes_str += encode_uvarint(self.serial)
+
         if cmd == CMD.WHOISHERE:
-            bytes_str = bytes()
-            bytes_str += encode_uvarint(self.src)
-            bytes_str += encode_uvarint(kwargs['dst'])
-            bytes_str += encode_uvarint(self.serial)
             bytes_str += int2bytes(self.dev_type)
             bytes_str += int2bytes(cmd.value)
             bytes_str += int2bytes(self.dev_name_length) + self.dev_name.encode()
-            bytes_str_size = len(bytes_str)
-            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
-
-            self.conn.request('POST', '', encode_base64(bytes_str).encode())
-            self._update(self.conn.getresponse().read())
-            self.serial += 1
 
         if cmd == CMD.SETSTATUS:
-            bytes_str = bytes()
-            bytes_str += encode_uvarint(self.src)
-            bytes_str += encode_uvarint(kwargs['dst'])
-            bytes_str += encode_uvarint(self.serial)
             bytes_str += int2bytes(kwargs['dev_type'])
             bytes_str += int2bytes(cmd.value)
             bytes_str += int2bytes(kwargs['value'])
-            bytes_str_size = len(bytes_str)
-            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
-
-            self.conn.request('POST', '', encode_base64(bytes_str).encode())
-            self._update(self.conn.getresponse().read())
-            self.serial += 1
 
         if cmd == CMD.GETSTATUS:
-            bytes_str = bytes()
-            bytes_str += encode_uvarint(self.src)
-            bytes_str += encode_uvarint(kwargs['dst'])
-            bytes_str += encode_uvarint(self.serial)
             bytes_str += int2bytes(kwargs['dev_type'])
             bytes_str += int2bytes(cmd.value)
-            bytes_str_size = len(bytes_str)
-            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
 
-            self.conn.request('POST', '', encode_base64(bytes_str).encode())
-            self._update(self.conn.getresponse().read())
-            self.serial += 1
+        bytes_str_size = len(bytes_str)
+        bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+
+        self.conn.request('POST', '', encode_base64(bytes_str).encode())
+        self._update(self.conn.getresponse().read())
+        self.serial += 1
 
     def _update(self, res):
         for packet in convert_base64_to_packet(res):
             payload = packet.get_payload()
 
             if payload['cmd'] == CMD.IAMHERE:
-                self.network[payload['dev_name']] = {
-                    'src': payload['src'],
-                    'dev_type': payload['dev_type']
+                if payload['dev_type'] == DeviceType.EnvSensor:
+                    self.network[payload['dev_name']] = {
+                        'src': payload['src'],
+                        'dev_type': payload['dev_type']
+                    }
+                elif payload['dev_type'] == DeviceType.Switch:
+                    self.network[payload['dev_name']] = {
+                        'src': payload['src'],
+                        'dev_type': payload['dev_type'],
+                        'dev_props': payload['dev_drop_dev_name_arr']
+                    }
+                else:
+                    self.network[payload['dev_name']] = {
+                        'src': payload['src'],
+                        'dev_type': payload['dev_type']
                 }
 
             elif payload['cmd'] == CMD.TICK:
@@ -345,20 +339,20 @@ def main():
     smart_hub.send_test()
     smart_hub.send_test()
     smart_hub.send_packet(CMD.GETSTATUS,
-                          dst=smart_hub.network['LAMP02']['src'],
-                          dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+                          dst=smart_hub.network['SWITCH03']['src'],
+                          dev_type=smart_hub.network['SWITCH03']['dev_type'].value)
     smart_hub.send_test()
     smart_hub.send_test()
     smart_hub.send_test()
     smart_hub.send_test()
-    smart_hub.send_packet(CMD.SETSTATUS,
-                          value=1,
-                          dst=smart_hub.network['LAMP02']['src'],
-                          dev_type=smart_hub.network['LAMP02']['dev_type'].value)
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
+    # smart_hub.send_packet(CMD.SETSTATUS,
+    #                       value=1,
+    #                       dst=smart_hub.network['LAMP02']['src'],
+    #                       dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
     print(smart_hub.network)
 
 
