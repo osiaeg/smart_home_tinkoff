@@ -8,32 +8,22 @@ import binascii
 import json
 import time
 
-
-class CMD(Enum):
-    WHOISHERE = 0x01
-    IAMHERE = 0x02
-    GETSTATUS = 0x03
-    STATUS = 0x04
-    SETSTATUS = 0x05
-    TICK = 0x06
-
-
-class Device:
-    dev_name: str
-    dev_props: bytes  # много байт
-
-
-class DeviceType(Enum):
-    SmartHub = 0x01
-    EnvSensor = 0x02
-    Switch = 0x03
-    Lamp = 0x04
-    Socket = 0x05
-    Clock = 0x06
-
-
-class TimerCmdBody:
-    pass
+CRC_TABLE = [0, 29, 58, 39, 116, 105, 78, 83, 232, 245, 210, 207, 156, 129, 166, 187,
+             205, 208, 247, 234, 185, 164, 131, 158, 37, 56, 31, 2, 81, 76, 107, 118,
+             135, 154, 189, 160, 243, 238, 201, 212, 111, 114, 85, 72, 27, 6, 33, 60,
+             74, 87, 112, 109, 62, 35, 4, 25, 162, 191, 152, 133, 214, 203, 236, 241,
+             19, 14, 41, 52, 103, 122, 93, 64, 251, 230, 193, 220, 143, 146, 181, 168,
+             222, 195, 228, 249, 170, 183, 144, 141, 54, 43, 12, 17, 66, 95, 120, 101,
+             148, 137, 174, 179, 224, 253, 218, 199, 124, 97, 70, 91, 8, 21, 50, 47,
+             89, 68, 99, 126, 45, 48, 23, 10, 177, 172, 139, 150, 197, 216, 255, 226,
+             38, 59, 28, 1, 82, 79, 104, 117, 206, 211, 244, 233, 186, 167, 128, 157,
+             235, 246, 209, 204, 159, 130, 165, 184, 3, 30, 57, 36, 119, 106, 77, 80,
+             161, 188, 155, 134, 213, 200, 239, 242, 73, 84, 115, 110, 61, 32, 7, 26,
+             108, 113, 86, 75, 24, 5, 34, 63, 132, 153, 190, 163, 240, 237, 202, 215,
+             53, 40, 15, 18, 65, 92, 123, 102, 221, 192, 231, 250, 169, 180, 147, 142,
+             248, 229, 194, 223, 140, 145, 182, 171, 16, 13, 42, 55, 100, 121, 94, 67,
+             178, 175, 136, 149, 198, 219, 252, 225, 90, 71, 96, 125, 46, 51, 20, 9,
+             127, 98, 69, 88, 11, 22, 49, 44, 151, 138, 173, 176, 227, 254, 217, 196]
 
 
 def decode_uvarint(data: bytes) -> tuple[int, int]:
@@ -45,6 +35,92 @@ def decode_uvarint(data: bytes) -> tuple[int, int]:
         if not byte & 0x80:
             break
     return value, len(data[:shift // 7])
+
+
+def encode_uvarint(num):
+    result = b""
+
+    while True:
+        b = num & 0x7F
+        num >>= 7
+
+        if num:
+            result += bytes([b | 0x80])
+        else:
+            result += bytes([b])
+            break
+
+    return result
+
+
+def encode_base64(input_bytes: bytes, urlsafe: bool = True) -> str:
+    """Encode bytes as an unpadded base64 string."""
+
+    if urlsafe:
+        encode = base64.urlsafe_b64encode
+    else:
+        encode = base64.b64encode
+
+    output_bytes = encode(input_bytes)
+    output_string = output_bytes.decode("ascii")
+    return output_string.rstrip("=")
+
+
+def decode_base64(input_bytes) -> bytes:
+    """Decode an unpadded standard or urlsafe base64 string to bytes."""
+
+    input_len = len(input_bytes)
+    padding = b"=" * (3 - ((input_len + 3) % 4))
+
+    # Passing altchars here allows decoding both standard and urlsafe base64
+    output_bytes = base64.b64decode(input_bytes + padding, altchars=b"-_")
+    return output_bytes
+
+
+def crc8(bytes_str):
+    crc = 0
+
+    for byte in bytes_str:
+        data = byte ^ crc
+        crc = CRC_TABLE[data]
+
+    return crc.to_bytes(length=1, byteorder='big')
+
+
+def check_crc8(payload, checksum):
+    calculated_checksum = crc8(payload)
+    return int.from_bytes(calculated_checksum, byteorder='big') == checksum
+
+
+def int2bytes(num: int) -> bytes:
+    return num.to_bytes(length=1, byteorder='big')
+
+
+class CMD(Enum):
+    WHOISHERE = 0x01
+    IAMHERE = 0x02
+    GETSTATUS = 0x03
+    STATUS = 0x04
+    SETSTATUS = 0x05
+    TICK = 0x06
+
+
+class DeviceType(Enum):
+    SmartHub = 0x01
+    EnvSensor = 0x02
+    Switch = 0x03
+    Lamp = 0x04
+    Socket = 0x05
+    Clock = 0x06
+
+
+class Device:
+    dev_name: str
+    dev_props: bytes  # много байт
+
+
+class TimerCmdBody:
+    pass
 
 
 class Payload:
@@ -116,6 +192,18 @@ class Packet:
         return self.payload.__dict__
 
 
+def convert_base64_to_packet(res) -> list[Packet]:
+    packets = []
+    bytes_string = decode_base64(res)
+
+    while bytes_string:
+        length = bytes_string[0]
+        packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
+        bytes_string = bytes_string[length + 2:]
+
+    return packets
+
+
 class Clock:
     def __init__(self, src, cmd_body):
         self.src = src
@@ -124,6 +212,7 @@ class Clock:
 
 class Socket:
     dev_type = DeviceType.Switch
+
     def __init__(self, src, cmd_body, value):
         self.src = src
         self.cmd_body = cmd_body
@@ -132,6 +221,7 @@ class Socket:
 
 class Switch:
     dev_type = DeviceType.Switch
+
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
@@ -139,6 +229,7 @@ class Switch:
 
 class Lamp:
     dev_type = DeviceType.Switch
+
     def __init__(self, src, cmd_body, value):
         self.src = src
         self.cmd_body = cmd_body
@@ -157,98 +248,6 @@ class EnvSensorProps:
 
 class EnvSensorCmdBody:
     pass
-
-
-def encode_base64(input_bytes: bytes, urlsafe: bool = True) -> str:
-    """Encode bytes as an unpadded base64 string."""
-
-    if urlsafe:
-        encode = base64.urlsafe_b64encode
-    else:
-        encode = base64.b64encode
-
-    output_bytes = encode(input_bytes)
-    output_string = output_bytes.decode("ascii")
-    return output_string.rstrip("=")
-
-
-def decode_base64(input_bytes) -> bytes:
-    """Decode an unpadded standard or urlsafe base64 string to bytes."""
-
-    input_len = len(input_bytes)
-    padding = b"=" * (3 - ((input_len + 3) % 4))
-
-    # Passing altchars here allows decoding both standard and urlsafe base64
-    output_bytes = base64.b64decode(input_bytes + padding, altchars=b"-_")
-    return output_bytes
-
-
-CRC_TABLE = [0, 29, 58, 39, 116, 105, 78, 83, 232, 245, 210, 207, 156, 129, 166, 187,
-             205, 208, 247, 234, 185, 164, 131, 158, 37, 56, 31, 2, 81, 76, 107, 118,
-             135, 154, 189, 160, 243, 238, 201, 212, 111, 114, 85, 72, 27, 6, 33, 60,
-             74, 87, 112, 109, 62, 35, 4, 25, 162, 191, 152, 133, 214, 203, 236, 241,
-             19, 14, 41, 52, 103, 122, 93, 64, 251, 230, 193, 220, 143, 146, 181, 168,
-             222, 195, 228, 249, 170, 183, 144, 141, 54, 43, 12, 17, 66, 95, 120, 101,
-             148, 137, 174, 179, 224, 253, 218, 199, 124, 97, 70, 91, 8, 21, 50, 47,
-             89, 68, 99, 126, 45, 48, 23, 10, 177, 172, 139, 150, 197, 216, 255, 226,
-             38, 59, 28, 1, 82, 79, 104, 117, 206, 211, 244, 233, 186, 167, 128, 157,
-             235, 246, 209, 204, 159, 130, 165, 184, 3, 30, 57, 36, 119, 106, 77, 80,
-             161, 188, 155, 134, 213, 200, 239, 242, 73, 84, 115, 110, 61, 32, 7, 26,
-             108, 113, 86, 75, 24, 5, 34, 63, 132, 153, 190, 163, 240, 237, 202, 215,
-             53, 40, 15, 18, 65, 92, 123, 102, 221, 192, 231, 250, 169, 180, 147, 142,
-             248, 229, 194, 223, 140, 145, 182, 171, 16, 13, 42, 55, 100, 121, 94, 67,
-             178, 175, 136, 149, 198, 219, 252, 225, 90, 71, 96, 125, 46, 51, 20, 9,
-             127, 98, 69, 88, 11, 22, 49, 44, 151, 138, 173, 176, 227, 254, 217, 196]
-
-
-def crc8(bytes_str):
-    crc = 0
-
-    for byte in bytes_str:
-        data = byte ^ crc
-        crc = CRC_TABLE[data]
-
-    return crc.to_bytes(length=1, byteorder='big')
-
-
-def check_crc8(payload, checksum):
-    calculated_checksum = crc8(payload)
-    return int.from_bytes(calculated_checksum, byteorder='big') == checksum
-
-
-def convert_base64_to_packet(res) -> list[Packet]:
-    packets = []
-    bytes_string = decode_base64(res)
-
-    while bytes_string:
-        length = bytes_string[0]
-        packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
-        bytes_string = bytes_string[length + 2:]
-
-    return packets
-
-
-def encode_uvarint(num):
-    result = b""
-
-    while True:
-        # Младшие 7 битов числа
-        b = num & 0x7F
-        num >>= 7
-
-        if num:
-            # Если есть еще байты, устанавливаем младший бит в 1
-            result += bytes([b | 0x80])
-        else:
-            # Если больше нет байтов, устанавливаем младший бит в 0
-            result += bytes([b])
-            break
-
-    return result
-
-
-def int2bytes(num: int) -> bytes:
-    return num.to_bytes(length=1, byteorder='big')
 
 
 class SmartHub:
@@ -295,7 +294,6 @@ class SmartHub:
             bytes_str += int2bytes(kwargs['value'])
             bytes_str_size = len(bytes_str)
             bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
-            # print(encode_base64(bytes_str))
 
             self.conn.request('POST', '', encode_base64(bytes_str).encode())
             self._update(self.conn.getresponse().read())
@@ -310,7 +308,6 @@ class SmartHub:
             bytes_str += int2bytes(cmd.value)
             bytes_str_size = len(bytes_str)
             bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
-            # print(encode_base64(bytes_str))
 
             self.conn.request('POST', '', encode_base64(bytes_str).encode())
             self._update(self.conn.getresponse().read())
@@ -321,24 +318,18 @@ class SmartHub:
             payload = packet.get_payload()
 
             if payload['cmd'] == CMD.IAMHERE:
-                self.network[packet.payload.__dict__['dev_name']] = {
-                    'src': packet.payload.__dict__['src'],
-                    'dev_type': packet.payload.__dict__['dev_type']
+                self.network[payload['dev_name']] = {
+                    'src': payload['src'],
+                    'dev_type': payload['dev_type']
                 }
 
             elif payload['cmd'] == CMD.TICK:
                 self.timestamp = payload['timer_cmd_body']
 
             elif payload['cmd'] == CMD.STATUS:
-                network_keys = list(self.network.keys())
-                network_vals = list(self.network.values())
-                device = {
-                    'src': payload['src'],
-                    'dev_type': payload['dev_type']
-                }
-                index = network_vals.index(device)
-                dev_name = network_keys[index]
-                self.network[dev_name]['value'] = payload['value']
+                for dev_name, device in self.network.items():
+                    if device['src'] == payload['src']:
+                        device['value'] = payload['value']
                 print(self.network)
 
 
@@ -368,7 +359,6 @@ def main():
     smart_hub.send_test()
     smart_hub.send_test()
     smart_hub.send_test()
-
     print(smart_hub.network)
 
 
