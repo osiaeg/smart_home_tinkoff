@@ -3,6 +3,7 @@ import sys
 from enum import Enum
 from http.client import HTTPConnection
 import base64
+import requests
 import binascii
 import json
 import time
@@ -56,6 +57,7 @@ class Payload:
     time_cmd_body: int
     dev_name: str = None
     dev_drop_dev_name_arr: list[str] = None
+    value: int
 
     def __init__(self, payload_bytes):
         self._parse(payload_bytes)
@@ -94,12 +96,24 @@ class Payload:
                 dev_name_length = payload_bytes[0]
                 self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
 
+        elif self.cmd == CMD.STATUS:
+            if self.dev_type in [DeviceType.Switch, DeviceType.Lamp, DeviceType.Socket]:
+                self.value = payload_bytes[0]
+            else:  # обработка EnvSensor
+                pass
+
 
 class Packet:
     def __init__(self, length: int, crc8: int, payload_bytes: bytes):
+        if not check_crc8(payload_bytes, crc8):
+            print("crc8 failed.")
+
         self.length = length
         self.payload = Payload(payload_bytes)
         self.crc8 = crc8
+
+    def get_payload(self):
+        return self.payload.__dict__
 
 
 class Clock:
@@ -140,7 +154,7 @@ class EnvSensorCmdBody:
     pass
 
 
-def encode_base64(input_bytes: bytes, urlsafe: bool = False) -> str:
+def encode_base64(input_bytes: bytes, urlsafe: bool = True) -> str:
     """Encode bytes as an unpadded base64 string."""
 
     if urlsafe:
@@ -150,7 +164,7 @@ def encode_base64(input_bytes: bytes, urlsafe: bool = False) -> str:
 
     output_bytes = encode(input_bytes)
     output_string = output_bytes.decode("ascii")
-    return output_string.rstrip("=").replace('/', '_')
+    return output_string.rstrip("=")
 
 
 def decode_base64(input_bytes) -> bytes:
@@ -199,7 +213,6 @@ def check_crc8(payload, checksum):
 
 # Пример использования:
 def check_date(payload, crc_8):
-
     if check_crc8(payload, crc_8):
         print("Контрольная сумма корректна.")
     else:
@@ -243,6 +256,8 @@ def int2bytes(num: int) -> bytes:
 
 class SmartHub:
     def __init__(self, url, address):
+        # r = requests.post('http://' + url)
+        # print(r.text)
         self.src = int(address, 16)
         self.dev_name = 'SmartHub'
         self.dev_name_length = len(self.dev_name)
@@ -250,21 +265,18 @@ class SmartHub:
         self.conn = HTTPConnection(url)
         self.serial = 1
         self.network = {}
+        self.timestamp = None
 
     def send_test(self):
         self.conn.request('POST', '')
-        response = self.conn.getresponse().read()
-        print(response)
-        print(decode_base64(response)[1:-1], decode_base64(response)[-1])
-        for packet in convert_base64_to_packet(response):
-            print(packet.__dict__)
+        self._update(self.conn.getresponse().read())
         self.serial += 1
 
-    def send_packet(self, cmd, dst=0x3FFF):
+    def send_packet(self, cmd, **kwargs):
         if cmd == CMD.WHOISHERE:
             bytes_str = bytes()
             bytes_str += encode_uvarint(self.src)
-            bytes_str += encode_uvarint(dst)
+            bytes_str += encode_uvarint(kwargs['dst'])
             bytes_str += encode_uvarint(self.serial)
             bytes_str += int2bytes(self.dev_type)
             bytes_str += int2bytes(cmd.value)
@@ -273,28 +285,93 @@ class SmartHub:
             bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
 
             self.conn.request('POST', '', encode_base64(bytes_str).encode())
-            response = self.conn.getresponse().read()
-
-            for packet in convert_base64_to_packet(response):
-                if packet.payload.__dict__['cmd'] == CMD.IAMHERE:
-                    self.network[packet.payload.__dict__['dev_name']] = {
-                        'src': packet.payload.__dict__['src'],
-                        'dev_type': packet.payload.__dict__['dev_type']
-                    }
-
+            self._update(self.conn.getresponse().read())
             self.serial += 1
+
+        if cmd == CMD.SETSTATUS:
+            bytes_str = bytes()
+            bytes_str += encode_uvarint(self.src)
+            bytes_str += encode_uvarint(kwargs['dst'])
+            bytes_str += encode_uvarint(self.serial)
+            bytes_str += int2bytes(kwargs['dev_type'])
+            bytes_str += int2bytes(cmd.value)
+            bytes_str += int2bytes(kwargs['value'])
+            bytes_str_size = len(bytes_str)
+            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+            # print(encode_base64(bytes_str))
+
+            self.conn.request('POST', '', encode_base64(bytes_str).encode())
+            self._update(self.conn.getresponse().read())
+            self.serial += 1
+
+        if cmd == CMD.GETSTATUS:
+            bytes_str = bytes()
+            bytes_str += encode_uvarint(self.src)
+            bytes_str += encode_uvarint(kwargs['dst'])
+            bytes_str += encode_uvarint(self.serial)
+            bytes_str += int2bytes(kwargs['dev_type'])
+            bytes_str += int2bytes(cmd.value)
+            bytes_str_size = len(bytes_str)
+            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+            # print(encode_base64(bytes_str))
+
+            self.conn.request('POST', '', encode_base64(bytes_str).encode())
+            self._update(self.conn.getresponse().read())
+            self.serial += 1
+
+    def _update(self, res):
+        for packet in convert_base64_to_packet(res):
+            payload = packet.get_payload()
+
+            if payload['cmd'] == CMD.IAMHERE:
+                self.network[packet.payload.__dict__['dev_name']] = {
+                    'src': packet.payload.__dict__['src'],
+                    'dev_type': packet.payload.__dict__['dev_type']
+                }
+
+            elif payload['cmd'] == CMD.TICK:
+                self.timestamp = payload['timer_cmd_body']
+
+            elif payload['cmd'] == CMD.STATUS:
+                network_keys = list(self.network.keys())
+                network_vals = list(self.network.values())
+                device = {
+                    'src': payload['src'],
+                    'dev_type': payload['dev_type']
+                }
+                index = network_vals.index(device)
+                dev_name = network_keys[index]
+                self.network[dev_name]['value'] = payload['value']
+                print(self.network)
 
 
 def main():
-
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
         sys.exit(1)
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    smart_hub.send_packet(CMD.WHOISHERE)
-    print(smart_hub.network)
-    smart_hub.send_packet(CMD.WHOISHERE)
+    smart_hub.send_packet(CMD.WHOISHERE, dst=0x3FFF)
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_packet(CMD.GETSTATUS,
+                          dst=smart_hub.network['LAMP02']['src'],
+                          dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_packet(CMD.SETSTATUS,
+                          value=1,
+                          dst=smart_hub.network['LAMP02']['src'],
+                          dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+    smart_hub.send_test()
+
     print(smart_hub.network)
 
 
