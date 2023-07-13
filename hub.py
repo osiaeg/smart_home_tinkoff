@@ -123,21 +123,26 @@ class Clock:
 
 
 class Socket:
-    def __init__(self, src, cmd_body):
+    dev_type = DeviceType.Switch
+    def __init__(self, src, cmd_body, value):
         self.src = src
         self.cmd_body = cmd_body
+        self.value = value
 
 
 class Switch:
+    dev_type = DeviceType.Switch
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
 
 
 class Lamp:
-    def __init__(self, src, cmd_body):
+    dev_type = DeviceType.Switch
+    def __init__(self, src, cmd_body, value):
         self.src = src
         self.cmd_body = cmd_body
+        self.value = value
 
 
 class EnvSensor:
@@ -209,14 +214,6 @@ def crc8(bytes_str):
 def check_crc8(payload, checksum):
     calculated_checksum = crc8(payload)
     return int.from_bytes(calculated_checksum, byteorder='big') == checksum
-
-
-# Пример использования:
-def check_date(payload, crc_8):
-    if check_crc8(payload, crc_8):
-        print("Контрольная сумма корректна.")
-    else:
-        print("Контрольная сумма некорректна.")  # Надо отправить запрос на повторное отправление данных
 
 
 def convert_base64_to_packet(res) -> list[Packet]:
