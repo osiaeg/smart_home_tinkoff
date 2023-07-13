@@ -191,16 +191,13 @@ def crc8(bytes_str):
 
     return crc.to_bytes(length=1, byteorder='big')
 
-
 def check_crc8(payload, checksum):
     calculated_checksum = crc8(payload)
-    return calculated_checksum == checksum
+    return int.from_bytes(calculated_checksum, byteorder='big') == checksum
 
 
 # Пример использования:
-def check_date():
-    payload = [0x01, 0x02, 0x03]
-    crc_8 = 0xFA
+def check_date(payload, crc_8):
 
     if check_crc8(payload, crc_8):
         print("Контрольная сумма корректна.")
@@ -260,6 +257,7 @@ class SmartHub:
         for packet in convert_base64_to_packet(response):
             print(packet.__dict__)
         self.serial += 1
+        return decode_base64(response)[1:-1], decode_base64(response)[-1]
 
     def send_packet(self, cmd, dst=0x3FFF):
         if cmd == CMD.WHOISHERE:
@@ -288,7 +286,7 @@ def main():
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
     # smart_hub.send_packet(CMD.WHOISHERE)
-    smart_hub.send_test()
+    check_date(*smart_hub.send_test())
 
 
 if __name__ == "__main__":
