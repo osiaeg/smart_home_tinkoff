@@ -6,7 +6,6 @@ import base64
 import binascii
 import json
 import time
-import uvarint
 
 
 class CMD(Enum):
@@ -240,105 +239,53 @@ def encode_uvarint(num):
     return result
 
 
-# def toBase(ayf):
-#      ark = encode_uvarint(ayf[0][0])
-#      # ark += encode_uvarint(ayf[dst])
-#      # ark += encode_uvarint(ayf['serial'])
-#      # ark += encode_uvarint(ayf['dev_type'])
-#      # ark += encode_uvarint(ayf['cmd'])
-#      # ark += encode_uvarint(ayf['cmd_body']['dev_name'])
-#      # ark += encode_uvarint(ayf['cmd_body']['dev_drops'])
-#      return ark
+def int2bytes(num: int) -> bytes:
+    return num.to_bytes(length=1, byteorder='big')
+
 
 class SmartHub:
     def __init__(self, url, address):
-        self.src = address
+        self.src = int(address, 16)
         self.dev_name = 'SmartHub'
+        self.dev_name_length = len(self.dev_name)
+        self.dev_type = DeviceType.SmartHub.value
         self.conn = HTTPConnection(url)
         self.serial = 1
 
+    def send_test(self):
+        self.conn.request('POST', '')
+        response = self.conn.getresponse().read()
+        for packet in convert_base64_to_packet(response):
+            print(packet.__dict__)
+        self.serial += 1
+
+    def send_packet(self, cmd, dst=0x3FFF):
+        if cmd == CMD.WHOISHERE:
+            bytes_str = bytes()
+            bytes_str += encode_uvarint(self.src)
+            bytes_str += encode_uvarint(dst)
+            bytes_str += encode_uvarint(self.serial)
+            self.serial += 1
+            bytes_str += int2bytes(self.dev_type)
+            bytes_str += int2bytes(cmd.value)
+            bytes_str += int2bytes(self.dev_name_length) + self.dev_name.encode()
+            bytes_str_size = len(bytes_str)
+            bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+            self.conn.request('POST', '', encode_base64(bytes_str).encode())
+            response = self.conn.getresponse().read()
+            for packet in convert_base64_to_packet(response):
+                print(packet.__dict__)
+            self.serial += 1
 
 
 def main():
+
     if len(sys.argv) < 3:
         print("Invalid command line arguments")
         sys.exit(1)
-    url = sys.argv[1]
-    hub_adress = sys.argv[2]
 
-    conn = HTTPConnection(url)
-    conn.request('POST', "", b'EPAd_38BAQEIU211cnRIdWIt')
-    response = conn.getresponse().read()
-    for packet in convert_base64_to_packet(response):
-        print(packet.__dict__)
-    base64_string = response.decode()
-    print(base64_string)
-
-    bytes_string = decode_base64(response)
-    length = bytes_string[0]
-    src = decode_uvarint(bytes_string[1:])[0]
-    dst = uvarint.decode(bytes_string[3:5]).integer
-    serial = uvarint.decode(bytes_string[5:7]).integer
-    dev_type = bytes_string[6]
-    cmd = bytes_string[7]
-    timestamp = uvarint.decode(bytes_string[8:14]).integer
-    crc_8 = bytes_string[-1]
-
-    json_string = json.dumps([{
-        'length': length,
-        'payload': {
-            'src': src,
-            'dst': dst,
-            'serial': serial,
-            'dev_type': dev_type,
-            'cmd': cmd,
-            'cmd_body': {
-                'timestamp': timestamp
-            }
-        },
-        'crc8': crc_8
-    }], indent=4)
-    print(json_string)
-    print('-' * 20)
-
-    src = int(hub_adress, 16)
-    dst = 16383
-    serial = 1
-    dev_type = DeviceType.SmartHub.value
-    cmd = CMD.WHOISHERE.value
-    dev_name = "SmurtHub"
-    who_is_here_dict = {
-        'payload': {
-            'src': src,
-            'dst': dst,
-            'serial': serial,
-            'dev_type': dev_type,
-            'cmd': cmd,
-            'cmd_body': {
-                'dev_name': dev_name,
-                # 'dev_drops': None,
-            }
-        }
-    }
-    who_is_here_json = json.dumps([who_is_here_dict], indent=2)
-    print(who_is_here_json)
-    who_is_here_bytearray = bytes()
-    who_is_here_bytearray += encode_uvarint(src)
-    who_is_here_bytearray += encode_uvarint(dst)
-    who_is_here_bytearray += encode_uvarint(serial)
-    who_is_here_bytearray += dev_type.to_bytes(length=1, byteorder='big')
-    who_is_here_bytearray += cmd.to_bytes(length=1, byteorder='big')
-    dev_name_length = len(dev_name)
-    who_is_here_bytearray += dev_name_length.to_bytes(length=1, byteorder='big') + dev_name.encode()
-    who_is_here_size = len(who_is_here_bytearray)
-    who_is_here_bytearray = who_is_here_size.to_bytes(length=1,
-                                                      byteorder='big') + who_is_here_bytearray + crc8(who_is_here_bytearray)
-
-    print(encode_base64(who_is_here_bytearray))
-    test_whoishere_base64 = "EPAd_38BAQEIU211cnRIdWIt"
-    print(f"Base64 for WHOISHERE: {test_whoishere_base64}")
-
-    conn.close()
+    smart_hub = SmartHub(sys.argv[1], sys.argv[2])
+    smart_hub.send_packet(CMD.WHOISHERE)
 
 
 if __name__ == "__main__":
