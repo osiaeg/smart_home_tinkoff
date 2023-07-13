@@ -255,6 +255,8 @@ class SmartHub:
     def send_test(self):
         self.conn.request('POST', '')
         response = self.conn.getresponse().read()
+        print(response)
+        print(decode_base64(response)[1:-1], decode_base64(response)[-1])
         for packet in convert_base64_to_packet(response):
             print(packet.__dict__)
         self.serial += 1
@@ -274,7 +276,7 @@ class SmartHub:
             self.conn.request('POST', '', encode_base64(bytes_str).encode())
             response = self.conn.getresponse().read()
             for packet in convert_base64_to_packet(response):
-                print(packet.__dict__)
+                print(packet.payload.__dict__)
             self.serial += 1
 
 
@@ -285,7 +287,8 @@ def main():
         sys.exit(1)
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    smart_hub.send_packet(CMD.WHOISHERE)
+    # smart_hub.send_packet(CMD.WHOISHERE)
+    smart_hub.send_test()
 
 
 if __name__ == "__main__":
