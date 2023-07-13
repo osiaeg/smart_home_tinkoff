@@ -251,6 +251,7 @@ class SmartHub:
         self.dev_type = DeviceType.SmartHub.value
         self.conn = HTTPConnection(url)
         self.serial = 1
+        self.network = {}
 
     def send_test(self):
         self.conn.request('POST', '')
@@ -267,16 +268,22 @@ class SmartHub:
             bytes_str += encode_uvarint(self.src)
             bytes_str += encode_uvarint(dst)
             bytes_str += encode_uvarint(self.serial)
-            self.serial += 1
             bytes_str += int2bytes(self.dev_type)
             bytes_str += int2bytes(cmd.value)
             bytes_str += int2bytes(self.dev_name_length) + self.dev_name.encode()
             bytes_str_size = len(bytes_str)
             bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+
             self.conn.request('POST', '', encode_base64(bytes_str).encode())
             response = self.conn.getresponse().read()
+
             for packet in convert_base64_to_packet(response):
-                print(packet.payload.__dict__)
+                if packet.payload.__dict__['cmd'] == CMD.IAMHERE:
+                    self.network[packet.payload.__dict__['dev_name']] = {
+                        'src': packet.payload.__dict__['src'],
+                        'dev_type': packet.payload.__dict__['dev_type']
+                    }
+
             self.serial += 1
 
 
@@ -287,8 +294,10 @@ def main():
         sys.exit(1)
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    # smart_hub.send_packet(CMD.WHOISHERE)
-    smart_hub.send_test()
+    smart_hub.send_packet(CMD.WHOISHERE)
+    print(smart_hub.network)
+    smart_hub.send_packet(CMD.WHOISHERE)
+    print(smart_hub.network)
 
 
 if __name__ == "__main__":
