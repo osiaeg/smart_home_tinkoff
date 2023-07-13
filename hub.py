@@ -108,25 +108,30 @@ class Clock:
         self.src = src
         self.cmd_body = cmd_body
 
+
 class Socket:
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
+
 
 class Switch:
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
 
+
 class Lamp:
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
 
+
 class EnvSensor:
     def __init__(self, src, cmd_body):
         self.src = src
         self.cmd_body = cmd_body
+
 
 class EnvSensorProps:
     pass
@@ -146,7 +151,7 @@ def encode_base64(input_bytes: bytes, urlsafe: bool = False) -> str:
 
     output_bytes = encode(input_bytes)
     output_string = output_bytes.decode("ascii")
-    return output_string.rstrip("=")
+    return output_string.rstrip("=").replace('/', '_')
 
 
 def decode_base64(input_bytes) -> bytes:
@@ -160,18 +165,32 @@ def decode_base64(input_bytes) -> bytes:
     return output_bytes
 
 
-def crc8(data):
+CRC_TABLE = [0, 29, 58, 39, 116, 105, 78, 83, 232, 245, 210, 207, 156, 129, 166, 187,
+             205, 208, 247, 234, 185, 164, 131, 158, 37, 56, 31, 2, 81, 76, 107, 118,
+             135, 154, 189, 160, 243, 238, 201, 212, 111, 114, 85, 72, 27, 6, 33, 60,
+             74, 87, 112, 109, 62, 35, 4, 25, 162, 191, 152, 133, 214, 203, 236, 241,
+             19, 14, 41, 52, 103, 122, 93, 64, 251, 230, 193, 220, 143, 146, 181, 168,
+             222, 195, 228, 249, 170, 183, 144, 141, 54, 43, 12, 17, 66, 95, 120, 101,
+             148, 137, 174, 179, 224, 253, 218, 199, 124, 97, 70, 91, 8, 21, 50, 47,
+             89, 68, 99, 126, 45, 48, 23, 10, 177, 172, 139, 150, 197, 216, 255, 226,
+             38, 59, 28, 1, 82, 79, 104, 117, 206, 211, 244, 233, 186, 167, 128, 157,
+             235, 246, 209, 204, 159, 130, 165, 184, 3, 30, 57, 36, 119, 106, 77, 80,
+             161, 188, 155, 134, 213, 200, 239, 242, 73, 84, 115, 110, 61, 32, 7, 26,
+             108, 113, 86, 75, 24, 5, 34, 63, 132, 153, 190, 163, 240, 237, 202, 215,
+             53, 40, 15, 18, 65, 92, 123, 102, 221, 192, 231, 250, 169, 180, 147, 142,
+             248, 229, 194, 223, 140, 145, 182, 171, 16, 13, 42, 55, 100, 121, 94, 67,
+             178, 175, 136, 149, 198, 219, 252, 225, 90, 71, 96, 125, 46, 51, 20, 9,
+             127, 98, 69, 88, 11, 22, 49, 44, 151, 138, 173, 176, 227, 254, 217, 196]
+
+
+def crc8(bytes_str):
     crc = 0
 
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = (crc << 1) ^ 0xD5  # Возможно надо поменять кодировку
-            else:
-                crc <<= 1
+    for byte in bytes_str:
+        data = byte ^ crc
+        crc = CRC_TABLE[data]
 
-    return crc
+    return crc.to_bytes(length=1, byteorder='big')
 
 
 def check_crc8(payload, checksum):
@@ -231,6 +250,14 @@ def encode_uvarint(num):
 #      # ark += encode_uvarint(ayf['cmd_body']['dev_drops'])
 #      return ark
 
+class SmartHub:
+    def __init__(self, url, address):
+        self.src = address
+        self.dev_name = 'SmartHub'
+        self.conn = HTTPConnection(url)
+        self.serial = 1
+
+
 
 def main():
     if len(sys.argv) < 3:
@@ -279,7 +306,8 @@ def main():
     serial = 1
     dev_type = DeviceType.SmartHub.value
     cmd = CMD.WHOISHERE.value
-    who_is_here_json = json.dumps([{
+    dev_name = "SmurtHub"
+    who_is_here_dict = {
         'payload': {
             'src': src,
             'dst': dst,
@@ -287,14 +315,26 @@ def main():
             'dev_type': dev_type,
             'cmd': cmd,
             'cmd_body': {
-                'dev_name': 'SmurtHub',
-                'dev_drops': None,
+                'dev_name': dev_name,
+                # 'dev_drops': None,
             }
         }
-    }])
+    }
+    who_is_here_json = json.dumps([who_is_here_dict], indent=2)
     print(who_is_here_json)
-    #print(json.dumps,'toBase(*who_is_here_json)')
+    who_is_here_bytearray = bytes()
+    who_is_here_bytearray += encode_uvarint(src)
+    who_is_here_bytearray += encode_uvarint(dst)
+    who_is_here_bytearray += encode_uvarint(serial)
+    who_is_here_bytearray += dev_type.to_bytes(length=1, byteorder='big')
+    who_is_here_bytearray += cmd.to_bytes(length=1, byteorder='big')
+    dev_name_length = len(dev_name)
+    who_is_here_bytearray += dev_name_length.to_bytes(length=1, byteorder='big') + dev_name.encode()
+    who_is_here_size = len(who_is_here_bytearray)
+    who_is_here_bytearray = who_is_here_size.to_bytes(length=1,
+                                                      byteorder='big') + who_is_here_bytearray + crc8(who_is_here_bytearray)
 
+    print(encode_base64(who_is_here_bytearray))
     test_whoishere_base64 = "EPAd_38BAQEIU211cnRIdWIt"
     print(f"Base64 for WHOISHERE: {test_whoishere_base64}")
 
