@@ -198,13 +198,15 @@ class Packet:
 
 def convert_base64_to_packet(res) -> list[Packet]:
     packets = []
-    bytes_string = decode_base64(res)
-
-    while bytes_string:
-        length = bytes_string[0]
-        if check_crc8(bytes_string[1:length + 1], bytes_string[length + 1]):
-            packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
-        bytes_string = bytes_string[length + 2:]
+    try:
+        bytes_string = decode_base64(res)
+        while bytes_string:
+            length = bytes_string[0]
+            if check_crc8(bytes_string[1:length + 1], bytes_string[length + 1]):
+                packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
+            bytes_string = bytes_string[length + 2:]
+    except:
+        return []
 
     return packets
 
