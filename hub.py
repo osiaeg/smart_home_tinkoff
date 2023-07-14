@@ -265,7 +265,6 @@ class SmartHub:
 
     def send_test(self):
         self.conn.request('POST', '')
-        self._update(self.conn.getresponse().read())
         self.serial += 1
 
     def send_packet(self, cmd, **kwargs):
@@ -292,8 +291,12 @@ class SmartHub:
         bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
 
         self.conn.request('POST', '', encode_base64(bytes_str).encode())
-        self._update(self.conn.getresponse().read())
         self.serial += 1
+
+    def pars_response(self):
+        response = self.conn.getresponse()
+        self._update(response.read())
+        return response.status
 
     def _update(self, res):
         for packet in convert_base64_to_packet(res):
@@ -315,7 +318,7 @@ class SmartHub:
                     self.network[payload['dev_name']] = {
                         'src': payload['src'],
                         'dev_type': payload['dev_type']
-                }
+                    }
 
             elif payload['cmd'] == CMD.TICK:
                 self.timestamp = payload['timer_cmd_body']
@@ -334,17 +337,27 @@ def main():
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
     smart_hub.send_packet(CMD.WHOISHERE, dst=0x3FFF)
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_packet(CMD.GETSTATUS,
-                          dst=smart_hub.network['SWITCH03']['src'],
-                          dev_type=smart_hub.network['SWITCH03']['dev_type'].value)
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
-    smart_hub.send_test()
+    command_timestamp = smart_hub.timestamp
+    status = smart_hub.pars_response()
+    while status != 204:
+        if smart_hub.timestamp - command_timestamp < 300:
+            smart_hub.send_test()
+            smart_hub.pars_response()
+        else:
+            for device in smart_hub.network:
+                smart_hub.send_packet(CMD.GETSTATUS,
+                                      dst=smart_hub.network[device]['src'],
+                                      dev_type=smart_hub.network[device]['dev_type'].value)
+        time.sleep(1)
+        # print(smart_hub.network)
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
+    # smart_hub.send_test()
     # smart_hub.send_packet(CMD.SETSTATUS,
     #                       value=1,
     #                       dst=smart_hub.network['LAMP02']['src'],
@@ -353,7 +366,6 @@ def main():
     # smart_hub.send_test()
     # smart_hub.send_test()
     # smart_hub.send_test()
-    print(smart_hub.network)
 
 
 if __name__ == "__main__":
