@@ -4,9 +4,6 @@ from enum import Enum
 from http.client import HTTPConnection
 import base64
 import requests
-import binascii
-import json
-import time
 
 CRC_TABLE = [0, 29, 58, 39, 116, 105, 78, 83, 232, 245, 210, 207, 156, 129, 166, 187,
              205, 208, 247, 234, 185, 164, 131, 158, 37, 56, 31, 2, 81, 76, 107, 118,
@@ -114,15 +111,6 @@ class DeviceType(Enum):
     Clock = 0x06
 
 
-class Device:
-    dev_name: str
-    dev_props: bytes  # много байт
-
-
-class TimerCmdBody:
-    pass
-
-
 class Payload:
     src: int
     dst: int
@@ -155,9 +143,10 @@ class Payload:
             self.timer_cmd_body, _ = decode_uvarint(payload_bytes)
 
         elif self.cmd == CMD.IAMHERE:
+            dev_name_length = payload_bytes[0]
+            self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
+
             if self.dev_type == DeviceType.Switch:
-                dev_name_length = payload_bytes[0]
-                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
                 payload_bytes = payload_bytes[dev_name_length + 1:]
                 dev_drop_size = payload_bytes[0]
                 payload_bytes = payload_bytes[1:]
@@ -169,12 +158,7 @@ class Payload:
                     self.dev_drop_dev_name_arr.append(connect_dev_name.decode())
                     payload_bytes = payload_bytes[connect_dev_name_length + 1:]
 
-            elif self.dev_type in [DeviceType.Clock, DeviceType.Lamp]:
-                dev_name_length = payload_bytes[0]
-                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
             elif self.dev_type == DeviceType.EnvSensor:
-                dev_name_length = payload_bytes[0]
-                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
                 payload_bytes = payload_bytes[dev_name_length + 1:]
                 self.sensors = payload_bytes[0]
                 payload_bytes = payload_bytes[1:]
@@ -218,62 +202,15 @@ def convert_base64_to_packet(res) -> list[Packet]:
 
     while bytes_string:
         length = bytes_string[0]
-        packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
+        if check_crc8(bytes_string[1:length + 1], bytes_string[length + 1]):
+            packets.append(Packet(length, bytes_string[length + 1], bytes_string[1:length + 1]))
         bytes_string = bytes_string[length + 2:]
 
     return packets
 
 
-class Clock:
-    def __init__(self, src, cmd_body):
-        self.src = src
-        self.cmd_body = cmd_body
-
-
-class Socket:
-    dev_type = DeviceType.Switch
-
-    def __init__(self, src, cmd_body, value):
-        self.src = src
-        self.cmd_body = cmd_body
-        self.value = value
-
-
-class Switch:
-    dev_type = DeviceType.Switch
-
-    def __init__(self, src, cmd_body):
-        self.src = src
-        self.cmd_body = cmd_body
-
-
-class Lamp:
-    dev_type = DeviceType.Switch
-
-    def __init__(self, src, cmd_body, value):
-        self.src = src
-        self.cmd_body = cmd_body
-        self.value = value
-
-
-class EnvSensor:
-    def __init__(self, src, cmd_body):
-        self.src = src
-        self.cmd_body = cmd_body
-
-
-class EnvSensorProps:
-    pass
-
-
-class EnvSensorCmdBody:
-    pass
-
-
 class SmartHub:
     def __init__(self, url, address):
-        # r = requests.post('http://' + url)
-        # print(r.text)
         self.src = int(address, 16)
         self.dev_name = 'HUB01'
         self.dev_name_length = len(self.dev_name)
@@ -327,21 +264,24 @@ class SmartHub:
 
             if payload['cmd'] == CMD.IAMHERE:
                 if payload['dev_type'] == DeviceType.EnvSensor:
-                    self.network[payload['dev_name']] = {
+                    self.network[payload['src']] = {
                         'src': payload['src'],
+                        'dev_name': payload['dev_name'],
                         'dev_type': payload['dev_type'],
                         'sensors': payload['sensors'],
                         'triggers': payload['triggers']
                     }
                 elif payload['dev_type'] == DeviceType.Switch:
-                    self.network[payload['dev_name']] = {
+                    self.network[payload['src']] = {
                         'src': payload['src'],
+                        'dev_name': payload['dev_name'],
                         'dev_type': payload['dev_type'],
                         'dev_props': payload['dev_drop_dev_name_arr']
                     }
                 else:
-                    self.network[payload['dev_name']] = {
+                    self.network[payload['src']] = {
                         'src': payload['src'],
+                        'dev_name': payload['dev_name'],
                         'dev_type': payload['dev_type']
                     }
 
@@ -349,65 +289,55 @@ class SmartHub:
                 self.timestamp = payload['timer_cmd_body']
 
             elif payload['cmd'] == CMD.STATUS:
-                for dev_name, device in self.network.items():
-                    if device['src'] == payload['src']:
-                        device['value'] = payload['value']
+                if payload['dev_type'] == DeviceType.Switch:
+                    switch = self.network[payload['src']]
+                    if 'value' in switch:
+                        switch_value = switch['value']
+                        if switch_value != payload['value']:
+                            cmd_SETSTATUS_all = b''
+                            for dev_name in switch['dev_props']:
+                                for device in self.network.values():
+                                    if device['dev_name'] == dev_name:
+                                        cmd_SETSTATUS_all += self.get_cmd_bytes(CMD.SETSTATUS,
+                                                                                value=payload['value'],
+                                                                                dst=device['src'],
+                                                                                dev_type=device['dev_type'].value)
+                            self.send_packet(cmd_SETSTATUS_all)
+
+                        switch['value'] = payload['value']
+                    else:
+                        switch['value'] = payload['value']
+                else:
+                    for dev_name, device in self.network.items():
+                        if device['src'] == payload['src']:
+                            device['value'] = payload['value']
 
 
 def main():
     if len(sys.argv) < 3:
-        print("Invalid command line arguments")
-        sys.exit(1)
+        sys.exit(99)
 
+    smart_hub = SmartHub(sys.argv[1], sys.argv[2])
+    cmd_WHOISHERE = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
+    status = smart_hub.send_packet(cmd_WHOISHERE)
 
-    # smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    # print(smart_hub.network)
-    # smart_hub.update(b'OAL_fwQCAghTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI09w')
-    # print(smart_hub.network)
-    # cmd_WHOISHERE = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
-    # status = smart_hub.send_packet(cmd_WHOISHERE)
-    # status = smart_hub.send_test()
-    # status = smart_hub.send_test()
-    # status = smart_hub.send_test()
-    # print(smart_hub.network)
-    # cmd_GETSTATUS_all = b''
-    # for dev_name, device in smart_hub.network.items():
-    #     cmd_GETSTATUS_all += smart_hub.get_cmd_bytes(CMD.GETSTATUS,
-    #                                                  dst=device['src'],
-    #                                                  dev_type=device['dev_type'].value)
-    # status = smart_hub.send_packet(cmd_GETSTATUS_all)
-    # status = smart_hub.send_test()
-    # status = smart_hub.send_test()
-    # status = smart_hub.send_test()
-    # print(smart_hub.network)
-    # cmd_SETSTATUS_LAMP = smart_hub.get_cmd_bytes(CMD.SETSTATUS,
-    #                                              value=1,
-    #                                              dst=smart_hub.network['LAMP02']['src'],
-    #                                              dev_type=smart_hub.network['LAMP02']['dev_type'].value)
-    # status = smart_hub.send_packet(cmd_SETSTATUS_LAMP)
-    # while status != 204:
-    #     status = smart_hub.send_test()
-    #     print(smart_hub.network)
-    #     time.sleep(2)
+    command_timestamp = smart_hub.timestamp
+    flag = True
+    while status != 204:
+        status = smart_hub.send_test()
 
-    # print()
-    # command_timestamp = smart_hub.timestamp
-    # status = smart_hub.pars_response()
-    # while status != 204:
-    #     if smart_hub.timestamp - command_timestamp < 300:
-    #         smart_hub.send_test()
-    #         smart_hub.pars_response()
-    #     else:
-    #         for device in smart_hub.network:
-    #             smart_hub._get_cmd()
-    #     time.sleep(1)
-    # print(smart_hub.network)
-    # smart_hub.send_packet()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
+        if (smart_hub.timestamp - command_timestamp >= 300) and flag:
+            flag = False
+            cmd_GETSTATUS_all = b''
+            for device_name, device in smart_hub.network.items():
+                cmd_GETSTATUS_all += smart_hub.get_cmd_bytes(CMD.GETSTATUS,
+                                                             dst=device['src'],
+                                                             dev_type=device['dev_type'].value)
+            status = smart_hub.send_packet(cmd_GETSTATUS_all)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except:
+        sys.exit(99)
