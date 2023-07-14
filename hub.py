@@ -134,6 +134,7 @@ class Payload:
     dev_name: str = None
     dev_drop_dev_name_arr: list[str] = None
     value: int
+    sensors: int
 
     def __init__(self, payload_bytes):
         self._parse(payload_bytes)
@@ -171,6 +172,25 @@ class Payload:
             elif self.dev_type in [DeviceType.Clock, DeviceType.Lamp]:
                 dev_name_length = payload_bytes[0]
                 self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
+            elif self.dev_type == DeviceType.EnvSensor:
+                dev_name_length = payload_bytes[0]
+                self.dev_name = payload_bytes[1: dev_name_length + 1].decode()
+                payload_bytes = payload_bytes[dev_name_length + 1:]
+                self.sensors = payload_bytes[0]
+                payload_bytes = payload_bytes[1:]
+                tiggers_length = payload_bytes[0]
+                payload_bytes = payload_bytes[1:]
+                self.triggers = []
+                for _ in range(tiggers_length):
+                    op = payload_bytes[0]
+                    payload_bytes = payload_bytes[1:]
+                    value, bytes_read = decode_uvarint(payload_bytes)
+                    payload_bytes = payload_bytes[bytes_read:]
+                    dev_name_length = payload_bytes[0]
+                    tigger_name = payload_bytes[1: dev_name_length + 1].decode()
+                    payload_bytes = payload_bytes[dev_name_length + 1:]
+                    tigger = {'op': op, 'value': value, 'name': tigger_name}
+                    self.triggers.append(tigger)
 
         elif self.cmd == CMD.STATUS:
             if self.dev_type in [DeviceType.Switch, DeviceType.Lamp, DeviceType.Socket]:
@@ -255,7 +275,7 @@ class SmartHub:
         # r = requests.post('http://' + url)
         # print(r.text)
         self.src = int(address, 16)
-        self.dev_name = 'SmartHub'
+        self.dev_name = 'HUB01'
         self.dev_name_length = len(self.dev_name)
         self.dev_type = DeviceType.SmartHub.value
         self.conn = HTTPConnection(url)
@@ -263,11 +283,7 @@ class SmartHub:
         self.network = {}
         self.timestamp = None
 
-    def send_test(self):
-        self.conn.request('POST', '')
-        self.serial += 1
-
-    def send_packet(self, cmd, **kwargs):
+    def get_cmd_bytes(self, cmd, **kwargs):
         bytes_str = bytes()
         bytes_str += encode_uvarint(self.src)
         bytes_str += encode_uvarint(kwargs['dst'])
@@ -289,16 +305,23 @@ class SmartHub:
 
         bytes_str_size = len(bytes_str)
         bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
+        return bytes_str
 
-        self.conn.request('POST', '', encode_base64(bytes_str).encode())
+    def send_test(self):
+        self.conn.request('POST', '')
         self.serial += 1
-
-    def pars_response(self):
         response = self.conn.getresponse()
-        self._update(response.read())
+        self.update(response.read())
         return response.status
 
-    def _update(self, res):
+    def send_packet(self, packet_bytes):
+        self.conn.request('POST', '', encode_base64(packet_bytes).encode())
+        self.serial += 1
+        response = self.conn.getresponse()
+        self.update(response.read())
+        return response.status
+
+    def update(self, res):
         for packet in convert_base64_to_packet(res):
             payload = packet.get_payload()
 
@@ -306,7 +329,9 @@ class SmartHub:
                 if payload['dev_type'] == DeviceType.EnvSensor:
                     self.network[payload['dev_name']] = {
                         'src': payload['src'],
-                        'dev_type': payload['dev_type']
+                        'dev_type': payload['dev_type'],
+                        'sensors': payload['sensors'],
+                        'triggers': payload['triggers']
                     }
                 elif payload['dev_type'] == DeviceType.Switch:
                     self.network[payload['dev_name']] = {
@@ -327,7 +352,6 @@ class SmartHub:
                 for dev_name, device in self.network.items():
                     if device['src'] == payload['src']:
                         device['value'] = payload['value']
-                print(self.network)
 
 
 def main():
@@ -335,33 +359,50 @@ def main():
         print("Invalid command line arguments")
         sys.exit(1)
 
-    smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    smart_hub.send_packet(CMD.WHOISHERE, dst=0x3FFF)
-    command_timestamp = smart_hub.timestamp
-    status = smart_hub.pars_response()
-    while status != 204:
-        if smart_hub.timestamp - command_timestamp < 300:
-            smart_hub.send_test()
-            smart_hub.pars_response()
-        else:
-            for device in smart_hub.network:
-                smart_hub.send_packet(CMD.GETSTATUS,
-                                      dst=smart_hub.network[device]['src'],
-                                      dev_type=smart_hub.network[device]['dev_type'].value)
-        time.sleep(1)
-        # print(smart_hub.network)
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_test()
-    # smart_hub.send_packet(CMD.SETSTATUS,
-    #                       value=1,
-    #                       dst=smart_hub.network['LAMP02']['src'],
-    #                       dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+
+    # smart_hub = SmartHub(sys.argv[1], sys.argv[2])
+    # print(smart_hub.network)
+    # smart_hub.update(b'OAL_fwQCAghTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI09w')
+    # print(smart_hub.network)
+    # cmd_WHOISHERE = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
+    # status = smart_hub.send_packet(cmd_WHOISHERE)
+    # status = smart_hub.send_test()
+    # status = smart_hub.send_test()
+    # status = smart_hub.send_test()
+    # print(smart_hub.network)
+    # cmd_GETSTATUS_all = b''
+    # for dev_name, device in smart_hub.network.items():
+    #     cmd_GETSTATUS_all += smart_hub.get_cmd_bytes(CMD.GETSTATUS,
+    #                                                  dst=device['src'],
+    #                                                  dev_type=device['dev_type'].value)
+    # status = smart_hub.send_packet(cmd_GETSTATUS_all)
+    # status = smart_hub.send_test()
+    # status = smart_hub.send_test()
+    # status = smart_hub.send_test()
+    # print(smart_hub.network)
+    # cmd_SETSTATUS_LAMP = smart_hub.get_cmd_bytes(CMD.SETSTATUS,
+    #                                              value=1,
+    #                                              dst=smart_hub.network['LAMP02']['src'],
+    #                                              dev_type=smart_hub.network['LAMP02']['dev_type'].value)
+    # status = smart_hub.send_packet(cmd_SETSTATUS_LAMP)
+    # while status != 204:
+    #     status = smart_hub.send_test()
+    #     print(smart_hub.network)
+    #     time.sleep(2)
+
+    # print()
+    # command_timestamp = smart_hub.timestamp
+    # status = smart_hub.pars_response()
+    # while status != 204:
+    #     if smart_hub.timestamp - command_timestamp < 300:
+    #         smart_hub.send_test()
+    #         smart_hub.pars_response()
+    #     else:
+    #         for device in smart_hub.network:
+    #             smart_hub._get_cmd()
+    #     time.sleep(1)
+    # print(smart_hub.network)
+    # smart_hub.send_packet()
     # smart_hub.send_test()
     # smart_hub.send_test()
     # smart_hub.send_test()
