@@ -179,15 +179,18 @@ class Payload:
         elif self.cmd == CMD.STATUS:
             if self.dev_type in [DeviceType.Switch, DeviceType.Lamp, DeviceType.Socket]:
                 self.value = payload_bytes[0]
-            else:  # обработка EnvSensor
+            else:
+                value_size = payload_bytes[0]
+                payload_bytes = payload_bytes[1:]
+                for _ in range(value_size):
+                    value, bytes_read = decode_uvarint(payload_bytes)
+                    payload_bytes = payload_bytes[bytes_read:]
+                    self.value.append(value)
                 pass
 
 
 class Packet:
     def __init__(self, length: int, crc8: int, payload_bytes: bytes):
-        if not check_crc8(payload_bytes, crc8):
-            print("crc8 failed.")
-
         self.length = length
         self.payload = Payload(payload_bytes)
         self.crc8 = crc8
@@ -309,6 +312,49 @@ class SmartHub:
                         switch['value'] = payload['value']
                     else:
                         switch['value'] = payload['value']
+                elif payload['dev_type'] == DeviceType.EnvSensor:
+                    env = self.network[payload['src']]
+                    for op, value, name in env['triggers']:
+                        on_bin = bin(op)[2:]
+                        if int(on_bin[0]):
+                            if int(on_bin[1]):
+                                if value < payload['value'][int(on_bin[2:4])]:
+                                    for device in self.network.values():
+                                        if device['dev_name'] == name:
+                                            cmd_SETSTATUS_all += self.get_cmd_bytes(CMD.SETSTATUS,
+                                                                                    value=1,
+                                                                                    dst=device['src'],
+                                                                                    dev_type=device['dev_type'].value)
+                                    self.send_packet(cmd_SETSTATUS_all)
+                            else:
+                                if value > payload['value'][int(on_bin[2:4])]:
+                                    for device in self.network.values():
+                                        if device['dev_name'] == name:
+                                            cmd_SETSTATUS_all += self.get_cmd_bytes(CMD.SETSTATUS,
+                                                                                    value=1,
+                                                                                    dst=device['src'],
+                                                                                    dev_type=device['dev_type'].value)
+                                    self.send_packet(cmd_SETSTATUS_all)
+                        else:
+                            if int(on_bin[1]):
+                                if value < payload['value'][int(on_bin[2:4])]:
+                                    for device in self.network.values():
+                                        if device['dev_name'] == name:
+                                            cmd_SETSTATUS_all += self.get_cmd_bytes(CMD.SETSTATUS,
+                                                                                    value=0,
+                                                                                    dst=device['src'],
+                                                                                    dev_type=device['dev_type'].value)
+                                    self.send_packet(cmd_SETSTATUS_all)
+                            else:
+                                if value > payload['value'][int(on_bin[2:4])]:
+                                    for device in self.network.values():
+                                        if device['dev_name'] == name:
+                                            cmd_SETSTATUS_all += self.get_cmd_bytes(CMD.SETSTATUS,
+                                                                                    value=0,
+                                                                                    dst=device['src'],
+                                                                                    dev_type=device['dev_type'].value)
+                                    self.send_packet(cmd_SETSTATUS_all)
+                        pass
                 else:
                     for dev_name, device in self.network.items():
                         if device['src'] == payload['src']:
