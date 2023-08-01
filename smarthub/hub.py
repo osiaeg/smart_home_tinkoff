@@ -1,7 +1,11 @@
 import sys
 from http.client import HTTPConnection
-from utils import *
-from enums import CMD, DeviceType
+
+import requests
+from requests import Response
+
+from .utils import *
+from .enums import CMD, DeviceType
 
 
 class Payload:
@@ -109,16 +113,143 @@ def convert_base64_to_packet(res) -> list[Packet]:
 
 class SmartHub:
     def __init__(self, url, address):
+        self.url = 'http://' + url
         self.src = int(address, 16)
         self.dev_name = 'HUB01'
         self.dev_name_length = len(self.dev_name)
         self.dev_type = DeviceType.SmartHub.value
-        self.conn = HTTPConnection(url)
         self.serial = 1
         self.network = {}
         self.timestamp = None
+        self._init_network()
 
-    def get_cmd_bytes(self, cmd, **kwargs):
+    def request(self, data=None) -> list[dict]:
+        if data:
+            response = requests.post(self.url, data)
+        else:
+            response = requests.post(self.url)
+        self.serial += 1
+
+        if response.status_code == 204:
+            sys.exit(0)
+
+        if decoded_packet := decode_packet(response.content):
+            return [self.parse_packet(packet) for packet in split_decoded_packets(decoded_packet)]
+
+    def parse_packet(self, payload) -> dict:
+        src, bytes_read = decode_uvarint(payload)
+        payload = payload[bytes_read:]
+        dst, bytes_read = decode_uvarint(payload)
+        payload = payload[bytes_read:]
+        serial, bytes_read = decode_uvarint(payload)
+        payload = payload[bytes_read:]
+        dev_type = DeviceType(payload[0])
+        payload = payload[1:]
+        cmd = CMD(payload[0])
+        payload = payload[1:]
+        message = {
+            'payload': {
+                'src': src,
+                'dst': dst,
+                'serial': serial,
+                'dev_type': dev_type,
+                'cmd': cmd
+            }
+        }
+        if cmd == CMD.TICK:
+            timestamp, bytes_read = decode_uvarint(payload)
+            payload = payload[bytes_read:]
+            self.timestamp = int(timestamp)
+            message['payload']['cmd_body'] = {'timestamp': timestamp}
+        elif cmd == CMD.IAMHERE:
+            if dev_type == DeviceType.EnvSensor:
+                cmd_body = {}
+                dev_name_length = payload[0]
+                dev_name = payload[1: dev_name_length + 1].decode()
+                payload = payload[dev_name_length + 1:]
+                cmd_body['dev_name'] = dev_name
+                dev_props = {}
+                sensors = payload[0]
+                payload = payload[1:]
+                dev_props['sensors'] = sensors
+                triggers_size = payload[0]
+                payload = payload[1:]
+                triggers = []
+                for _ in range(triggers_size):
+                    op = payload[0]
+                    payload = payload[1:]
+                    value, bytes_read = decode_uvarint(payload)
+                    payload = payload[bytes_read:]
+                    name_length = payload[0]
+                    name = payload[1: name_length + 1].decode()
+                    payload = payload[name_length + 1:]
+
+                    trigger = {
+                        'op': op,
+                        'value': value,
+                        'name': name,
+                    }
+                    triggers.append(trigger)
+                dev_props['triggers'] = triggers
+                cmd_body['dev_props'] = dev_props
+                message['payload']['cmd_body'] = cmd_body
+
+            elif dev_type == DeviceType.Switch:
+                dev_name_length = payload[0]
+                dev_name = payload[1: dev_name_length + 1].decode()
+                payload = payload[dev_name_length + 1:]
+                dev_drop_size = payload[0]
+                payload = payload[1:]
+                dev_drop_dev_name_arr = []
+
+                for _ in range(dev_drop_size):
+                    connect_dev_name_length = payload[0]
+                    connect_dev_name = payload[1: connect_dev_name_length + 1]
+                    dev_drop_dev_name_arr.append(connect_dev_name.decode())
+                    payload = payload[connect_dev_name_length + 1:]
+
+                dev_props = {
+                    'dev_names': dev_drop_dev_name_arr,
+                }
+                cmd_body = {
+                    'dev_name': dev_name,
+                    'dev_props': dev_props,
+                }
+                message['payload']['cmd_body'] = cmd_body
+            elif dev_type in (DeviceType.Lamp, DeviceType.Socket, DeviceType.Clock):
+                dev_name_length = payload[0]
+                dev_name = payload[1: dev_name_length + 1].decode()
+                payload = payload[dev_name_length + 1:]
+                cmd_body = {
+                    'dev_name': dev_name,
+                }
+                message['payload']['cmd_body'] = cmd_body
+        elif cmd == CMD.STATUS:
+            if dev_type == DeviceType.EnvSensor:
+                values_size = payload[0]
+                payload = payload[1:]
+                values_arr = []
+
+                for _ in range(values_size):
+                    value, bytes_read = decode_uvarint(payload)
+                    payload = payload[bytes_read:]
+                    values_arr.append(value)
+
+                cmd_body = {
+                    'values': values_arr,
+                }
+                message['payload']['cmd_body'] = cmd_body
+            elif dev_type in (DeviceType.Switch, DeviceType.Lamp, DeviceType.Socket):
+                value = payload[0]
+                payload = payload[1:]
+                cmd_body = {
+                    'value': value,
+                }
+                message['payload']['cmd_body'] = cmd_body
+
+        return message
+
+    def get_cmd_base64(self, cmd, **kwargs):
         bytes_str = bytes()
         bytes_str += encode_uvarint(self.src)
         bytes_str += encode_uvarint(kwargs['dst'])
@@ -140,7 +271,10 @@ class SmartHub:
 
         bytes_str_size = len(bytes_str)
         bytes_str = int2bytes(bytes_str_size) + bytes_str + crc8(bytes_str)
-        return bytes_str
+        return encode_base64(bytes_str)
+
+    def send_WHOISHERE(self):
+        pass
 
     def send_test(self):
         self.conn.request('POST', '')
@@ -253,32 +387,60 @@ class SmartHub:
                         if device['src'] == payload['src']:
                             device['value'] = payload['value']
 
+    def _init_network(self):
+        pass
+
 
 def main():
     if len(sys.argv) < 3:
         sys.exit(99)
 
     smart_hub = SmartHub(sys.argv[1], sys.argv[2])
-    cmd_WHOISHERE = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
-    status = smart_hub.send_packet(cmd_WHOISHERE)
+    request_bytes = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
+    request_base64 = encode_base64(request_bytes)
+    response = requests.post(smart_hub.url, data=request_base64)
+    if response.status_code == 204:
+        sys.exit(0)
 
-    command_timestamp = smart_hub.timestamp
-    flag = True
-    while status != 204:
-        status = smart_hub.send_test()
+    decoded_packet = decode_packet(response.content)
 
-        if (smart_hub.timestamp - command_timestamp >= 300) and flag:
-            flag = False
-            cmd_GETSTATUS_all = b''
-            for device_name, device in smart_hub.network.items():
-                cmd_GETSTATUS_all += smart_hub.get_cmd_bytes(CMD.GETSTATUS,
-                                                             dst=device['src'],
-                                                             dev_type=device['dev_type'].value)
-            status = smart_hub.send_packet(cmd_GETSTATUS_all)
+    if decoded_packet:
+        for packet in split_decoded_packets(decoded_packet):
+            print(smart_hub.parse_packet(packet))
+
+    while True:
+        response = smart_hub.request()
+
+        if response.status_code == 204:
+            break
+
+        decoded_packet = decode_packet(response.content)
+
+        if not decoded_packet:
+            continue
+
+    for packet in split_decoded_packets(decoded_packet):
+        print(smart_hub.parse_packet(packet))
+
+    # cmd_WHOISHERE = smart_hub.get_cmd_bytes(CMD.WHOISHERE, dst=0x3FFF)
+    # status = smart_hub.send_packet(cmd_WHOISHERE)
+    #
+    # command_timestamp = smart_hub.timestamp
+    # flag = True
+    # while status != 204:
+    #     status = smart_hub.send_test()
+    #
+    #     if (smart_hub.timestamp - command_timestamp >= 300) and flag:
+    #         flag = False
+    #         cmd_GETSTATUS_all = b''
+    #         for device_name, device in smart_hub.network.items():
+    #             cmd_GETSTATUS_all += smart_hub.get_cmd_bytes(CMD.GETSTATUS,
+    #                                                          dst=device['src'],
+    #                                                          dev_type=device['dev_type'].value)
+    #         status = smart_hub.send_packet(cmd_GETSTATUS_all)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except:
-        sys.exit(99)
+    # try:
+    main()
+    # except: sys.exit(99)
