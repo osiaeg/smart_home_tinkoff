@@ -7,9 +7,7 @@ IAMHERE = {
         "serial": 17,
         "dev_type": DeviceType(5),
         "cmd": CMD(2),
-        "cmd_body": {
-            "dev_name": "SOCKET01"
-        }
+        "cmd_body": {"dev_name": "SOCKET01"},
     }
 }
 
@@ -20,8 +18,6 @@ STATUS = {
         "serial": 19,
         "dev_type": DeviceType(5),
         "cmd": CMD(4),
-        "cmd_body": {
-            "value": 1
-        }
+        "cmd_body": {"value": 1},
     }
 }

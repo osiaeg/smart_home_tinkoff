@@ -7,9 +7,7 @@ IAMHERE = {
         "serial": 21,
         "dev_type": DeviceType(6),
         "cmd": CMD(2),
-        "cmd_body": {
-            "dev_name": "CLOCK01"
-        }
+        "cmd_body": {"dev_name": "CLOCK01"},
     }
 }
 
@@ -20,8 +18,6 @@ TICK = {
         "serial": 24,
         "dev_type": DeviceType(6),
         "cmd": CMD(6),
-        "cmd_body": {
-            "timestamp": 1801393098134
-        }
+        "cmd_body": {"timestamp": 1801393098134},
     }
 }

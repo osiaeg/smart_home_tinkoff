@@ -1,6 +1,11 @@
 from enum import Enum
 
 
+class ReservedAddress(Enum):
+    BROADCAST = 0x3FFF
+    ZERO = 0x0000
+
+
 class CMD(Enum):
     WHOISHERE = 0x01
     IAMHERE = 0x02

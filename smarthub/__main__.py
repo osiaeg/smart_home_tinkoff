@@ -1,12 +1,17 @@
-import sys
 from .hub import SmartHub
-from .enums import CMD, DeviceType
-from .utils import *
+from .enums import CMD, ReservedAddress
 from time import sleep
+from .parser import parser
+from loguru import logger
 
-smart_hub = SmartHub(sys.argv[1], sys.argv[2])
 
-request_base64 = smart_hub.get_cmd_base64(CMD.WHOISHERE, dst=0x3FFF)
+args = parser.parse_args()
+
+smart_hub = SmartHub(args.url, args.address)
+
+request_base64 = smart_hub.get_cmd_base64(
+    CMD.WHOISHERE, dst=ReservedAddress.BROADCAST.value
+)
 
 for message in smart_hub.request(request_base64):
     print(message)
@@ -15,7 +20,9 @@ request_timestamp = smart_hub.timestamp
 while True:
     isTimeout = smart_hub.timestamp - request_timestamp <= 300
     if not isTimeout:
-        request_base64 = smart_hub.get_cmd_base64(CMD.WHOISHERE, dst=0x3FFF)
+        request_base64 = smart_hub.get_cmd_base64(
+            CMD.WHOISHERE, dst=ReservedAddress.BROADCAST.value
+        )
 
         for message in smart_hub.request(request_base64):
             print(message)
@@ -23,9 +30,9 @@ while True:
         request_timestamp = smart_hub.timestamp
     else:
         for message in smart_hub.request():
-            print(message)
-            if message['payload']['cmd'] == CMD.IAMHERE:
-                src = message['payload']['src']
-                smart_hub.network[src] = message['payload']
-                print(smart_hub.network)
+            logger.info(message)
+            if message["payload"]["cmd"] == CMD.IAMHERE:
+                src = message["payload"]["src"]
+                smart_hub.network[src] = message["payload"]
+                logger.info(f"{smart_hub.network=}")
         sleep(0.5)

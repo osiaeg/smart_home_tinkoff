@@ -5,10 +5,10 @@ from smarthub.hub import SmartHub
 
 
 class SwitchCommandTestCase(unittest.TestCase):
-    smart_hub = SmartHub('localhost:9998', 'ef0')
+    smart_hub = SmartHub("localhost:9998", "ef0")
 
     def test_IAMHERE(self):
-        content = b'IgP_fwgDAghTV0lUQ0gwMQMFREVWMDEFREVWMDIFREVWMDMo'
+        content = b"IgP_fwgDAghTV0lUQ0gwMQMFREVWMDEFREVWMDIFREVWMDMo"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:
@@ -16,7 +16,7 @@ class SwitchCommandTestCase(unittest.TestCase):
                 self.assertEqual(self.smart_hub.parse_packet(packet), IAMHERE)
 
     def test_STATUS(self):
-        content = b'BgMBCgMEAac'
+        content = b"BgMBCgMEAac"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:

@@ -5,10 +5,10 @@ from smarthub.hub import SmartHub
 
 
 class SocketCommandTestCase(unittest.TestCase):
-    smart_hub = SmartHub('localhost:9998', 'ef0')
+    smart_hub = SmartHub("localhost:9998", "ef0")
 
     def test_IAMHERE(self):
-        content = b'DwX_fxEFAghTT0NLRVQwMc0'
+        content = b"DwX_fxEFAghTT0NLRVQwMc0"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:
@@ -16,7 +16,7 @@ class SocketCommandTestCase(unittest.TestCase):
                 self.assertEqual(self.smart_hub.parse_packet(packet), IAMHERE)
 
     def test_STATUS(self):
-        content = b'BgUBEwUEAQ8'
+        content = b"BgUBEwUEAQ8"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:

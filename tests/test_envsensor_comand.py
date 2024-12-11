@@ -5,10 +5,10 @@ from smarthub.hub import SmartHub
 
 
 class EnvSensorCommandTestCase(unittest.TestCase):
-    smart_hub = SmartHub('localhost:9998', 'ef0')
+    smart_hub = SmartHub("localhost:9998", "ef0")
 
     def test_IAMHERE(self):
-        content = b'OAL_fwQCAghTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI09w'
+        content = b"OAL_fwQCAghTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI09w"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:
@@ -16,7 +16,7 @@ class EnvSensorCommandTestCase(unittest.TestCase):
                 self.assertEqual(self.smart_hub.parse_packet(packet), IAMHERE)
 
     def test_STATUS(self):
-        content = b'EQIBBgIEBKUB4AfUjgaMjfILrw'
+        content = b"EQIBBgIEBKUB4AfUjgaMjfILrw"
         decoded_packet = decode_packet(content)
 
         if decoded_packet:

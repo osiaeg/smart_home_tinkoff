@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "smarthub"
+version = "0.1.0"
+description = "Smarthub module to connect to server of smarthouse"
+authors = ["osiaeg <egor.goncharov.osia@mail.ru>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.32.3"
+pytest = "^8.3.4"
+loguru = "^0.7.2"
+
+
+[tool.poetry.group.dev.dependencies]
+ipython = "^8.30.0"
+ruff = "^0.8.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
