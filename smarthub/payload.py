@@ -1,5 +1,7 @@
+from io import BytesIO
+
 from .enums import CMD, DeviceType
-from .utils import decode_uvarint
+from .uleb128 import u
 
 
 class Payload:
@@ -8,7 +10,7 @@ class Payload:
     serial: int
     dev_type: DeviceType
     cmd: CMD
-    cmd_body = None
+    cmd_body: dict
     time_cmd_body: int
     dev_name: str | None = None
     dev_drop_dev_name_arr: list[str] | None = None
@@ -18,63 +20,72 @@ class Payload:
     def __init__(self, payload_bytes):
         self._parse(payload_bytes)
 
+    def __parse_tick(self, cmd_body: BytesIO) -> None:
+        timestamp, _ = u.decode_reader(cmd_body)
+        self.cmd_body = {"timestamp": timestamp}
+
+    def __parse_iamhere(self, cmd_body: BytesIO) -> None:
+        dev_name_length = int.from_bytes(cmd_body.read(1))
+        dev_name = cmd_body.read(dev_name_length).decode()
+        self.cmd_body = {"dev_name": dev_name}
+
+        if self.dev_type == DeviceType.Switch:
+            dev_drop_size = int.from_bytes(cmd_body.read(1))
+            dev_drop_dev_name_arr = []
+
+            for _ in range(dev_drop_size):
+                connect_dev_name_length = int.from_bytes(cmd_body.read(1))
+                connect_dev_name = cmd_body.read(connect_dev_name_length).decode()
+                dev_drop_dev_name_arr.append(connect_dev_name)
+            self.cmd_body["dev_props"] = {"dev_names": dev_drop_dev_name_arr}
+
+        elif self.dev_type == DeviceType.EnvSensor:
+            sensors = int.from_bytes(cmd_body.read(1))
+            tiggers_length = int.from_bytes(cmd_body.read(1))
+            triggers = []
+            for _ in range(tiggers_length):
+                op = int.from_bytes(cmd_body.read(1))
+                value, _ = u.decode_reader(cmd_body)
+                dev_name_length = int.from_bytes(cmd_body.read(1))
+                tigger_name = cmd_body.read(dev_name_length).decode()
+                tigger = {"op": op, "value": value, "name": tigger_name}
+                triggers.append(tigger)
+            self.cmd_body["dev_props"] = {"sensors": sensors, "triggers": triggers}
+
+    def __parse_status(self, cmd_body: BytesIO) -> None:
+        if self.dev_type in [
+            DeviceType.Switch,
+            DeviceType.Lamp,
+            DeviceType.Socket,
+        ]:
+            self.cmd_body = {"value": int.from_bytes(cmd_body.read(1))}
+        else:
+            value = []
+            value_size = int.from_bytes(cmd_body.read(1))
+            for _ in range(value_size):
+                v, _ = u.decode_reader(cmd_body)
+                value.append(v)
+            self.cmd_body = {"value": value}
+
+    def __parse_cmd_body(self, cmd_body: bytes) -> None:
+        PARSERS = {
+            CMD.TICK: self.__parse_tick,
+            CMD.IAMHERE: self.__parse_iamhere,
+            CMD.STATUS: self.__parse_status,
+        }
+        with BytesIO(cmd_body) as c:
+            parser = PARSERS[self.cmd]
+            parser(c)
+
     def _parse(self, payload_bytes):
-        common_field_arr = []
-
-        for _ in range(3):
-            field, bytes_read = decode_uvarint(payload_bytes)
-            common_field_arr.append(field)
-            payload_bytes = payload_bytes[bytes_read:]
-
-        self.src, self.dst, self.serial = common_field_arr
-        self.dev_type, self.cmd = DeviceType(payload_bytes[0]), CMD(payload_bytes[1])
-        payload_bytes = payload_bytes[2:]
-
-        if self.cmd == CMD.TICK:
-            self.timer_cmd_body, _ = decode_uvarint(payload_bytes)
-
-        elif self.cmd == CMD.IAMHERE:
-            dev_name_length = payload_bytes[0]
-            self.dev_name = payload_bytes[1 : dev_name_length + 1].decode()
-
-            if self.dev_type == DeviceType.Switch:
-                payload_bytes = payload_bytes[dev_name_length + 1 :]
-                dev_drop_size = payload_bytes[0]
-                payload_bytes = payload_bytes[1:]
-                self.dev_drop_dev_name_arr = []
-
-                for _ in range(dev_drop_size):
-                    connect_dev_name_length = payload_bytes[0]
-                    connect_dev_name = payload_bytes[1 : connect_dev_name_length + 1]
-                    self.dev_drop_dev_name_arr.append(connect_dev_name.decode())
-                    payload_bytes = payload_bytes[connect_dev_name_length + 1 :]
-
-            elif self.dev_type == DeviceType.EnvSensor:
-                payload_bytes = payload_bytes[dev_name_length + 1 :]
-                self.sensors = payload_bytes[0]
-                payload_bytes = payload_bytes[1:]
-                tiggers_length = payload_bytes[0]
-                payload_bytes = payload_bytes[1:]
-                self.triggers = []
-                for _ in range(tiggers_length):
-                    op = payload_bytes[0]
-                    payload_bytes = payload_bytes[1:]
-                    value, bytes_read = decode_uvarint(payload_bytes)
-                    payload_bytes = payload_bytes[bytes_read:]
-                    dev_name_length = payload_bytes[0]
-                    tigger_name = payload_bytes[1 : dev_name_length + 1].decode()
-                    payload_bytes = payload_bytes[dev_name_length + 1 :]
-                    tigger = {"op": op, "value": value, "name": tigger_name}
-                    self.triggers.append(tigger)
-
-        elif self.cmd == CMD.STATUS:
-            if self.dev_type in [DeviceType.Switch, DeviceType.Lamp, DeviceType.Socket]:
-                self.value = payload_bytes[0]
-            else:
-                value_size = payload_bytes[0]
-                payload_bytes = payload_bytes[1:]
-                for _ in range(value_size):
-                    value, bytes_read = decode_uvarint(payload_bytes)
-                    payload_bytes = payload_bytes[bytes_read:]
-                    self.value.append(value)
-                pass
+        fields = ["src", "dst", "serial", "dev_type", "cmd"]
+        with BytesIO(payload_bytes) as bytes_stream:
+            bytes_readed = 0
+            for field in fields:
+                value, byte = u.decode_reader(bytes_stream)
+                bytes_readed += byte
+                setattr(self, field, value)
+            bytes_stream.seek(bytes_readed)
+            self.cmd = CMD(self.cmd)
+            self.dev_type = DeviceType(self.dev_type)
+            self.__parse_cmd_body(bytes_stream.read())
