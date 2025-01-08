@@ -1,11 +1,9 @@
 import base64
-import json
 
 from loguru import logger
 
-from ..enums import CMD, DeviceType
 from ..utils import check_crc8
-from .package import Packet
+from .package import Package
 
 
 class PackageDecoder:
@@ -19,7 +17,7 @@ class PackageDecoder:
         output_bytes = base64.b64decode(input_bytes + padding, altchars=b"-_")
         return output_bytes
 
-    def decode(self, res) -> list[Packet]:
+    def decode(self, res) -> list[Package]:
         """Decode bytes string to array of Packet objects"""
         packets = []
         try:
@@ -29,7 +27,7 @@ class PackageDecoder:
                 payload = bytes_string[1 : length + 1]
                 crc8 = bytes_string[length + 1]
                 if check_crc8(payload, crc8):
-                    package = Packet(length, crc8, payload)
+                    package = Package(length, crc8, payload)
                     packets.append(package)
                 else:
                     logger.warning("Message is broken. Check crc8 is failed.")
@@ -40,23 +38,3 @@ class PackageDecoder:
             return []
 
         return packets
-
-
-class PackageJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, Packet):
-            return {"length": o.length, "payload": o.get_payload(), "crc8": o.crc8}
-        elif isinstance(o, DeviceType | CMD):
-            return o.value
-        return super().default(o)
-
-
-def main():
-    message = b"EQIBBgIEBKUB4AfUjgaMjfILrw"
-    packages = PackageDecoder().decode(message)
-    json_packets = json.dumps(packages, cls=PackageJSONEncoder, indent=4)
-    print(json_packets)
-
-
-if __name__ == "__main__":
-    main()

@@ -14,11 +14,11 @@ from .utils import (
     split_decoded_packets,
 )
 from .enums import CMD, DeviceType
-from .packet.packet import Packet
+from .package.package import Package
 from loguru import logger
 
 
-def convert_base64_to_packet(res) -> list[Packet]:
+def convert_base64_to_packet(res) -> list[Package]:
     packets = []
     try:
         bytes_string = decode_base64(res)
@@ -26,7 +26,7 @@ def convert_base64_to_packet(res) -> list[Packet]:
             length = bytes_string[0]
             if check_crc8(bytes_string[1 : length + 1], bytes_string[length + 1]):
                 packets.append(
-                    Packet(
+                    Package(
                         length, bytes_string[length + 1], bytes_string[1 : length + 1]
                     )
                 )

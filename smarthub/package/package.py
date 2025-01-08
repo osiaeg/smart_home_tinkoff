@@ -1,7 +1,7 @@
 from ..payload import Payload
 
 
-class Packet:
+class Package:
     def __init__(self, length: int, crc8: int, payload_bytes: bytes):
         self.length = length
         self.payload = Payload(payload_bytes)

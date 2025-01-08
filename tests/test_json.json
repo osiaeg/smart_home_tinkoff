@@ -1,0 +1,519 @@
+[{
+    "SmartHub, WHOISHERE (1, 1)": {
+        "msg": "DAH_fwEBAQVIVUIwMeE",
+        "expect": [
+            {
+                "length": 12,
+                "payload": {
+                    "src": 1,
+                    "dst": 16383,
+                    "serial": 1,
+                    "dev_type": 1,
+                    "cmd": 1,
+                    "cmd_body": {
+                        "dev_name": "HUB01"
+                    }
+                },
+                "crc8": 225
+            }
+        ]
+    }
+},
+{
+    "SmartHub, IAMHERE (1, 2)": {
+        "msg": "DAH_fwIBAgVIVUIwMak",
+        "expect": [
+            {
+                "length": 12,
+                "payload": {
+                    "src": 1,
+                    "dst": 16383,
+                    "serial": 2,
+                    "dev_type": 1,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "HUB01"
+                    }
+                },
+                "crc8": 169
+            }
+        ]
+    }
+},
+{
+    "EnvSensor, WHOISHERE (2, 1)": {
+        "msg": "OAL_fwMCAQhTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI03Q",
+        "expect": [
+            {
+                "length": 56,
+                "payload": {
+                    "src": 2,
+                    "dst": 16383,
+                    "serial": 3,
+                    "dev_type": 2,
+                    "cmd": 1,
+                    "cmd_body": {
+                        "dev_name": "SENSOR01",
+                        "dev_props": {
+                            "sensors": 15,
+                            "triggers": [
+                                {
+                                    "op": 12,
+                                    "value": 100,
+                                    "name": "OTHER1"
+                                },
+                                {
+                                    "op": 15,
+                                    "value": 1200,
+                                    "name": "OTHER2"
+                                },
+                                {
+                                    "op": 0,
+                                    "value": 100012,
+                                    "name": "OTHER3"
+                                },
+                                {
+                                    "op": 8,
+                                    "value": 0,
+                                    "name": "OTHER4"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "crc8": 221
+            }
+        ]
+    }
+},
+{
+    "EnvSensor, IAMHERE (2, 2)": {
+        "msg": "OAL_fwQCAghTRU5TT1IwMQ8EDGQGT1RIRVIxD7AJBk9USEVSMgCsjQYGT1RIRVIzCAAGT1RIRVI09w",
+        "expect": [
+            {
+                "length": 56,
+                "payload": {
+                    "src": 2,
+                    "dst": 16383,
+                    "serial": 4,
+                    "dev_type": 2,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "SENSOR01",
+                        "dev_props": {
+                            "sensors": 15,
+                            "triggers": [
+                                {
+                                    "op": 12,
+                                    "value": 100,
+                                    "name": "OTHER1"
+                                },
+                                {
+                                    "op": 15,
+                                    "value": 1200,
+                                    "name": "OTHER2"
+                                },
+                                {
+                                    "op": 0,
+                                    "value": 100012,
+                                    "name": "OTHER3"
+                                },
+                                {
+                                    "op": 8,
+                                    "value": 0,
+                                    "name": "OTHER4"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "crc8": 247
+            }
+        ]
+    }
+},
+{
+    "EnvSensor, GETSTATUS (2, 3)": {
+        "msg": "BQECBQIDew",
+        "expect": [
+            {
+                "length": 5,
+                "payload": {
+                    "src": 1,
+                    "dst": 2,
+                    "serial": 5,
+                    "dev_type": 2,
+                    "cmd": 3
+                },
+                "crc8": 123
+            }
+        ]
+    }
+},
+{
+    "EnvSensor, STATUS (2, 4)": {
+        "msg": "EQIBBgIEBKUB4AfUjgaMjfILrw",
+        "expect": [
+            {
+                "length": 17,
+                "payload": {
+                    "src": 2,
+                    "dst": 1,
+                    "serial": 6,
+                    "dev_type": 2,
+                    "cmd": 4,
+                    "cmd_body": {
+                        "values": [
+                            165,
+                            992,
+                            100180,
+                            24938124
+                        ]
+                    }
+                },
+                "crc8": 175
+            }
+        ]
+    }
+},
+{
+    "Switch, WHOISHERE (3, 1)": {
+        "msg": "IgP_fwcDAQhTV0lUQ0gwMQMFREVWMDEFREVWMDIFREVWMDO1",
+        "expect": [
+            {
+                "length": 34,
+                "payload": {
+                    "src": 3,
+                    "dst": 16383,
+                    "serial": 7,
+                    "dev_type": 3,
+                    "cmd": 1,
+                    "cmd_body": {
+                        "dev_name": "SWITCH01",
+                        "dev_props": {
+                            "dev_names": [
+                                "DEV01",
+                                "DEV02",
+                                "DEV03"
+                            ]
+                        }
+                    }
+                },
+                "crc8": 181
+            }
+        ]
+    }
+},
+{
+    "Switch, IAMHERE (3, 2)": {
+        "msg": "IgP_fwgDAghTV0lUQ0gwMQMFREVWMDEFREVWMDIFREVWMDMo",
+        "expect": [
+            {
+                "length": 34,
+                "payload": {
+                    "src": 3,
+                    "dst": 16383,
+                    "serial": 8,
+                    "dev_type": 3,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "SWITCH01",
+                        "dev_props": {
+                            "dev_names": [
+                                "DEV01",
+                                "DEV02",
+                                "DEV03"
+                            ]
+                        }
+                    }
+                },
+                "crc8": 40
+            }
+        ]
+    }
+},
+{
+    "Switch, GETSTATUS (3, 3)": {
+        "msg": "BQEDCQMDoA",
+        "expect": [
+            {
+                "length": 5,
+                "payload": {
+                    "src": 1,
+                    "dst": 3,
+                    "serial": 9,
+                    "dev_type": 3,
+                    "cmd": 3
+                },
+                "crc8": 160
+            }
+        ]
+    }
+},
+{
+    "Switch, STATUS (3, 4)": {
+        "msg": "BgMBCgMEAac",
+        "expect": [
+            {
+                "length": 6,
+                "payload": {
+                    "src": 3,
+                    "dst": 1,
+                    "serial": 10,
+                    "dev_type": 3,
+                    "cmd": 4,
+                    "cmd_body": {
+                        "value": 1
+                    }
+                },
+                "crc8": 167
+            }
+        ]
+    }
+},
+{
+    "Lamp, WHOISHERE (4, 1)": {
+        "msg": "DQT_fwsEAQZMQU1QMDG8",
+        "expect": [
+            {
+                "length": 13,
+                "payload": {
+                    "src": 4,
+                    "dst": 16383,
+                    "serial": 11,
+                    "dev_type": 4,
+                    "cmd": 1,
+                    "cmd_body": {
+                        "dev_name": "LAMP01"
+                    }
+                },
+                "crc8": 188
+            }
+        ]
+    }
+},
+{
+    "Lamp, IAMHERE (4, 2)": {
+        "msg": "DQT_fwwEAgZMQU1QMDGU",
+        "expect": [
+            {
+                "length": 13,
+                "payload": {
+                    "src": 4,
+                    "dst": 16383,
+                    "serial": 12,
+                    "dev_type": 4,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "LAMP01"
+                    }
+                },
+                "crc8": 148
+            }
+        ]
+    }
+},
+{
+    "Lamp, GETSTATUS (4, 3)": {
+        "msg": "BQEEDQQDqw",
+        "expect": [
+            {
+                "length": 5,
+                "payload": {
+                    "src": 1,
+                    "dst": 4,
+                    "serial": 13,
+                    "dev_type": 4,
+                    "cmd": 3
+                },
+                "crc8": 171
+            }
+        ]
+    }
+},
+{
+    "Lamp, STATUS (4, 4)": {
+        "msg": "BgQBDgQEAaw",
+        "expect": [
+            {
+                "length": 6,
+                "payload": {
+                    "src": 4,
+                    "dst": 1,
+                    "serial": 14,
+                    "dev_type": 4,
+                    "cmd": 4,
+                    "cmd_body": {
+                        "value": 1
+                    }
+                },
+                "crc8": 172
+            }
+        ]
+    }
+},
+{
+    "Lamp, SETSTATUS (4, 5)": {
+        "msg": "BgEEDwQFAeE",
+        "expect": [
+            {
+                "length": 6,
+                "payload": {
+                    "src": 1,
+                    "dst": 4,
+                    "serial": 15,
+                    "dev_type": 4,
+                    "cmd": 5,
+                    "cmd_body": {
+                        "value": 1
+                    }
+                },
+                "crc8": 225
+            }
+        ]
+    }
+},
+{
+    "Socket, WHOISHERE (5, 1)": {
+        "msg": "DwX_fxAFAQhTT0NLRVQwMQ4",
+        "expect": [
+            {
+                "length": 15,
+                "payload": {
+                    "src": 5,
+                    "dst": 16383,
+                    "serial": 16,
+                    "dev_type": 5,
+                    "cmd": 1,
+                    "cmd_body": {
+                        "dev_name": "SOCKET01"
+                    }
+                },
+                "crc8": 14
+            }
+        ]
+    }
+},
+{
+    "Socket, IAMHERE (5, 2)": {
+        "msg": "DwX_fxEFAghTT0NLRVQwMc0",
+        "expect": [
+            {
+                "length": 15,
+                "payload": {
+                    "src": 5,
+                    "dst": 16383,
+                    "serial": 17,
+                    "dev_type": 5,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "SOCKET01"
+                    }
+                },
+                "crc8": 205
+            }
+        ]
+    }
+},
+{
+    "Socket, GETSTATUS (5, 3)": {
+        "msg": "BQEFEgUD5A",
+        "expect": [
+            {
+                "length": 5,
+                "payload": {
+                    "src": 1,
+                    "dst": 5,
+                    "serial": 18,
+                    "dev_type": 5,
+                    "cmd": 3
+                },
+                "crc8": 228
+            }
+        ]
+    }
+},
+{
+    "Socket, STATUS (5, 4)": {
+        "msg": "BgUBEwUEAQ8",
+        "expect": [
+            {
+                "length": 6,
+                "payload": {
+                    "src": 5,
+                    "dst": 1,
+                    "serial": 19,
+                    "dev_type": 5,
+                    "cmd": 4,
+                    "cmd_body": {
+                        "value": 1
+                    }
+                },
+                "crc8": 15
+            }
+        ]
+    }
+},
+{
+    "Socket, SETSTATUS (5, 5)": {
+        "msg": "BgEFFAUFAQc",
+        "expect": [
+            {
+                "length": 6,
+                "payload": {
+                    "src": 1,
+                    "dst": 5,
+                    "serial": 20,
+                    "dev_type": 5,
+                    "cmd": 5,
+                    "cmd_body": {
+                        "value": 1
+                    }
+                },
+                "crc8": 7
+            }
+        ]
+    }
+},
+{
+    "Clock, IAMHERE (6, 2)": {
+        "msg": "Dgb_fxUGAgdDTE9DSzAxsw",
+        "expect": [
+            {
+                "length": 14,
+                "payload": {
+                    "src": 6,
+                    "dst": 16383,
+                    "serial": 21,
+                    "dev_type": 6,
+                    "cmd": 2,
+                    "cmd_body": {
+                        "dev_name": "CLOCK01"
+                    }
+                },
+                "crc8": 179
+            }
+        ]
+    }
+},
+{
+    "Clock, TICK (6, 6)": {
+        "msg": "DAb_fxgGBpabldu2NNM",
+        "expect": [
+            {
+                "length": 12,
+                "payload": {
+                    "src": 6,
+                    "dst": 16383,
+                    "serial": 24,
+                    "dev_type": 6,
+                    "cmd": 6,
+                    "cmd_body": {
+                        "timestamp": 1801393098134
+                    }
+                },
+                "crc8": 211
+            }
+        ]
+    }
+}]
