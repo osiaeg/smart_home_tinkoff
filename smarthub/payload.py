@@ -33,37 +33,59 @@ class Payload:
             self.dev_type = DeviceType(self.dev_type)
             self.__parse_cmd_body(bytes_stream.read())
 
+    def __parse_one_byte(self, cmd_body: BytesIO) -> int:
+        return int.from_bytes(cmd_body.read(1))
+
+    def __parse_devname(self, cmd_body: BytesIO) -> None:
+        dev_name_length = self.__parse_one_byte(cmd_body)
+        dev_name = cmd_body.read(dev_name_length).decode()
+        self.cmd_body = {"dev_name": dev_name}
+
+    def __parse_env_sensor_props(self, cmd_body: BytesIO) -> None:
+        sensors = self.__parse_one_byte(cmd_body)
+        tiggers_length = self.__parse_one_byte(cmd_body)
+        triggers = []
+
+        for _ in range(tiggers_length):
+            op = self.__parse_one_byte(cmd_body)
+            value, _ = u.decode_reader(cmd_body)
+            dev_name_length = self.__parse_one_byte(cmd_body)
+            tigger_name = cmd_body.read(dev_name_length).decode()
+            tigger = {"op": op, "value": value, "name": tigger_name}
+            triggers.append(tigger)
+
+        self.cmd_body["dev_props"] = {"sensors": sensors, "triggers": triggers}
+
+    def __parse_switch_dev_names(self, cmd_body: BytesIO) -> None:
+        dev_drop_size = self.__parse_one_byte(cmd_body)
+        dev_drop_dev_name_arr = []
+
+        for _ in range(dev_drop_size):
+            connect_dev_name_length = self.__parse_one_byte(cmd_body)
+            connect_dev_name = cmd_body.read(connect_dev_name_length).decode()
+            dev_drop_dev_name_arr.append(connect_dev_name)
+
+        self.cmd_body["dev_props"] = {"dev_names": dev_drop_dev_name_arr}
+
     def __parse_tick(self, cmd_body: BytesIO) -> None:
         timestamp, _ = u.decode_reader(cmd_body)
         self.cmd_body = {"timestamp": timestamp}
 
     def __parse_iamhere(self, cmd_body: BytesIO) -> None:
-        dev_name_length = int.from_bytes(cmd_body.read(1))
-        dev_name = cmd_body.read(dev_name_length).decode()
-        self.cmd_body = {"dev_name": dev_name}
+        self.__parse_devname(cmd_body)
 
         if self.dev_type == DeviceType.Switch:
-            dev_drop_size = int.from_bytes(cmd_body.read(1))
-            dev_drop_dev_name_arr = []
-
-            for _ in range(dev_drop_size):
-                connect_dev_name_length = int.from_bytes(cmd_body.read(1))
-                connect_dev_name = cmd_body.read(connect_dev_name_length).decode()
-                dev_drop_dev_name_arr.append(connect_dev_name)
-            self.cmd_body["dev_props"] = {"dev_names": dev_drop_dev_name_arr}
-
+            self.__parse_switch_dev_names(cmd_body)
         elif self.dev_type == DeviceType.EnvSensor:
-            sensors = int.from_bytes(cmd_body.read(1))
-            tiggers_length = int.from_bytes(cmd_body.read(1))
-            triggers = []
-            for _ in range(tiggers_length):
-                op = int.from_bytes(cmd_body.read(1))
-                value, _ = u.decode_reader(cmd_body)
-                dev_name_length = int.from_bytes(cmd_body.read(1))
-                tigger_name = cmd_body.read(dev_name_length).decode()
-                tigger = {"op": op, "value": value, "name": tigger_name}
-                triggers.append(tigger)
-            self.cmd_body["dev_props"] = {"sensors": sensors, "triggers": triggers}
+            self.__parse_env_sensor_props(cmd_body)
+
+    def __parse_whoishere(self, cmd_body: BytesIO) -> None:
+        self.__parse_devname(cmd_body)
+
+        if self.dev_type == DeviceType.EnvSensor:
+            self.__parse_env_sensor_props(cmd_body)
+        elif self.dev_type == DeviceType.Switch:
+            self.__parse_switch_dev_names(cmd_body)
 
     def __parse_status(self, cmd_body: BytesIO) -> None:
         if self.dev_type in [
@@ -71,40 +93,14 @@ class Payload:
             DeviceType.Lamp,
             DeviceType.Socket,
         ]:
-            self.cmd_body = {"value": int.from_bytes(cmd_body.read(1))}
+            self.cmd_body = {"value": self.__parse_one_byte(cmd_body)}
         else:
             value = []
-            value_size = int.from_bytes(cmd_body.read(1))
+            value_size = self.__parse_one_byte(cmd_body)
             for _ in range(value_size):
                 v, _ = u.decode_reader(cmd_body)
                 value.append(v)
             self.cmd_body = {"values": value}
-
-    def __parse_whoishere(self, cmd_body: BytesIO) -> None:
-        dev_name_length = int.from_bytes(cmd_body.read(1))
-        dev_name = cmd_body.read(dev_name_length).decode()
-        self.cmd_body = {"dev_name": dev_name}
-        if self.dev_type == DeviceType.EnvSensor:
-            sensors = int.from_bytes(cmd_body.read(1))
-            tiggers_length = int.from_bytes(cmd_body.read(1))
-            triggers = []
-            for _ in range(tiggers_length):
-                op = int.from_bytes(cmd_body.read(1))
-                value, _ = u.decode_reader(cmd_body)
-                dev_name_length = int.from_bytes(cmd_body.read(1))
-                tigger_name = cmd_body.read(dev_name_length).decode()
-                tigger = {"op": op, "value": value, "name": tigger_name}
-                triggers.append(tigger)
-            self.cmd_body["dev_props"] = {"sensors": sensors, "triggers": triggers}
-        elif self.dev_type == DeviceType.Switch:
-            dev_drop_size = int.from_bytes(cmd_body.read(1))
-            dev_drop_dev_name_arr = []
-
-            for _ in range(dev_drop_size):
-                connect_dev_name_length = int.from_bytes(cmd_body.read(1))
-                connect_dev_name = cmd_body.read(connect_dev_name_length).decode()
-                dev_drop_dev_name_arr.append(connect_dev_name)
-            self.cmd_body["dev_props"] = {"dev_names": dev_drop_dev_name_arr}
 
     def __parse_getstatus(self, cmd_body: BytesIO) -> None:
         pass

@@ -18,7 +18,7 @@ class PackageDecoder:
         return output_bytes
 
     def decode(self, res) -> list[Package]:
-        """Decode bytes string to array of Packet objects"""
+        """Decode bytes string to array of Package objects"""
         packets = []
         try:
             bytes_string = self.__decode_base64(res)
@@ -26,13 +26,13 @@ class PackageDecoder:
                 length = bytes_string[0]
                 payload = bytes_string[1 : length + 1]
                 crc8 = bytes_string[length + 1]
+                bytes_string = bytes_string[length + 2 :]
                 if check_crc8(payload, crc8):
                     package = Package(length, crc8, payload)
                     packets.append(package)
                 else:
                     logger.warning("Message is broken. Check crc8 is failed.")
                     continue
-                bytes_string = bytes_string[length + 2 :]
         except Exception as e:
             logger.warning(e)
             return []
