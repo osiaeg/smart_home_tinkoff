@@ -1,14 +1,15 @@
+from datetime import datetime
 from time import sleep
 
 import requests
+from loguru import logger
 
+from .device import Clock, Lamp, Switch
 from .enums import CMD, DeviceType
 from .hub import SmartHub
-from .device import Lamp, Switch, Clock
-from .parser import parser
 from .package.decoder import PackageDecoder
 from .package.encoder import PackageEncoder
-from datetime import datetime
+from .parser import parser
 
 args = parser.parse_args()
 
@@ -73,7 +74,9 @@ try:
                         smart_hub.network[payload.src] = clock
                     elif dev_type == DeviceType.Switch:
                         switch = Switch(payload.cmd_body["dev_name"], payload.src)
+                        switch.devices = payload.cmd_body["dev_props"]["dev_names"]
                         smart_hub.network[payload.src] = switch
+
 
 except KeyboardInterrupt:
     pass

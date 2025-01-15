@@ -1,4 +1,6 @@
 from loguru import logger
+from rich import inspect
+
 
 class Device:
     def __init__(self, name, address):
@@ -26,9 +28,8 @@ class Device:
         self.__name = val
 
     def __str__(self):
-        return (
-            f"{self.__class__.__name__}: name={self.__name}, address={self.__address}"
-        )
+        inspect(self)
+        return ""
 
 
 class Lamp(Device):
@@ -46,5 +47,10 @@ class Switch(Device):
         super().__init__(name, address)
         self.__devices = []
 
-    def __str__(self) -> str:
-        return f"{super().__str__()}, devices={self.__devices}"
+    @property
+    def devices(self):
+        return self.__devices
+
+    @devices.setter
+    def devices(self, val):
+        self.__devices = val
