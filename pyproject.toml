@@ -16,6 +16,10 @@ loguru = "^0.7.2"
 ipython = "^8.30.0"
 ruff = "^0.8.2"
 
+
+[tool.poetry.group.tui.dependencies]
+rich = "^13.9.4"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

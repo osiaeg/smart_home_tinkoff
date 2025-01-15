@@ -14,5 +14,6 @@ parser = ArgumentParser(
     description="Emulate a SmartHub device which can connect to server",
 )
 
+# TODO: Add validation to url
 parser.add_argument("url", help="URL address of server to connect (without http://)")
 parser.add_argument("address", help="Address of SmartHub device", type=__hex_address)
