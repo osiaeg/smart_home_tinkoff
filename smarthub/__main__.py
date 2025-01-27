@@ -47,7 +47,7 @@ try:
                     lamp = Lamp(payload.cmd_body["dev_name"], payload.src)
                     smart_hub.network[payload.src] = lamp
                 elif dev_type == DeviceType.Clock:
-                    clock = Clock(payload.cmd_body["dev_name"], payload.src)
+                    clock = Clock(payload.cmd_body["dev_name"], payload.src, smart_hub.timestamp)
                     smart_hub.network[payload.src] = clock
                 elif dev_type == DeviceType.Switch:
                     switch = Switch(payload.cmd_body["dev_name"], payload.src)
@@ -62,16 +62,16 @@ try:
                 dev_type = package.payload.dev_type
                 if cmd == CMD.TICK:
                     timestamp = package.payload.cmd_body["timestamp"]
-                    time = datetime.fromtimestamp(timestamp / 1e3)
-                    smart_hub.timestamp = time
+                    smart_hub.timestamp = datetime.fromtimestamp(timestamp / 1e3)
                 elif cmd == CMD.IAMHERE:
                     payload = package.payload
                     if dev_type == DeviceType.Lamp:
                         lamp = Lamp(payload.cmd_body["dev_name"], payload.src)
                         smart_hub.network[payload.src] = lamp
                     elif dev_type == DeviceType.Clock:
-                        clock = Clock(payload.cmd_body["dev_name"], payload.src)
+                        clock = Clock(payload.cmd_body["dev_name"], payload.src, smart_hub.timestamp)
                         smart_hub.network[payload.src] = clock
+
                     elif dev_type == DeviceType.Switch:
                         switch = Switch(payload.cmd_body["dev_name"], payload.src)
                         switch.devices = payload.cmd_body["dev_props"]["dev_names"]

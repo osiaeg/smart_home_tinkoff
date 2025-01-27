@@ -1,3 +1,4 @@
+from collections.abc import Callable, Hashable
 from io import BytesIO
 
 from .enums import CMD, DeviceType
@@ -108,8 +109,8 @@ class Payload:
     def __parse_setstatus(self, cmd_body: BytesIO) -> None:
         self.__parse_status(cmd_body)
 
-    def __parse_cmd_body(self, cmd_body: bytes) -> None:
-        PARSERS = {
+    def __get_parser(self) -> Callable:
+        PARSERS: dict[Hashable, Callable] = {
             CMD.TICK: self.__parse_tick,
             CMD.IAMHERE: self.__parse_iamhere,
             CMD.STATUS: self.__parse_status,
@@ -117,6 +118,12 @@ class Payload:
             CMD.GETSTATUS: self.__parse_getstatus,
             CMD.SETSTATUS: self.__parse_setstatus,
         }
+        parser = PARSERS.get(self.cmd, None)
+        if parser is None:
+            raise ValueError()
+        return parser
+
+    def __parse_cmd_body(self, cmd_body: bytes) -> None:
         with BytesIO(cmd_body) as c:
-            parser = PARSERS[self.cmd]
+            parser = self.__get_parser()
             parser(c)

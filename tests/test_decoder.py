@@ -1,5 +1,5 @@
 from smarthub.package.decoder import PackageDecoder
-from smarthub.package.encoder import PackageJSONEncoder
+from smarthub.package.package import PackageJSONEncoder
 import json
 
 with open("tests/test_json.json") as f:
